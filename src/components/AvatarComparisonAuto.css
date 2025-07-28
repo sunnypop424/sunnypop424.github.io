@@ -748,6 +748,9 @@ strong.grade-info {
                 .price-calcul {
                     display: block;
                 }
+                .price-result.flex-c {
+                    padding: 1rem 0;
+                }
                 @media screen and (max-width: 375px) {
                     .avatar-comparison, .comparison-result {
                         padding: 2rem 1rem;
