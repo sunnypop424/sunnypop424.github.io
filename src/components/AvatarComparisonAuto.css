@@ -748,6 +748,11 @@ strong.grade-info {
                 .price-calcul {
                     display: block;
                 }
+                @media screen and (max-width: 375px) {
+                    .avatar-comparison, .comparison-result {
+                        padding: 2rem 1rem;
+                    }
+                }
             }
         }
     }
