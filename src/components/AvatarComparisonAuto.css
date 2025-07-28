@@ -1,0 +1,754 @@
+/* AvatarComparisonAuto.css */
+
+/* http://meyerweb.com/eric/tools/css/reset/ 
+   v2.0 | 20110126
+   License: none (public domain)
+*/
+:root {
+    --swal2-actions-margin: 0.5rem auto 0;
+    --swal2-title-padding: 1.5125rem 1rem 0;
+    --swal2-padding: 0 0 1.75rem;
+    --swal2-border-radius: 12px;
+    
+}
+
+html, body, div, span, applet, object, iframe,
+h1, h2, h3, h4, h5, h6, p, blockquote, pre,
+a, abbr, acronym, address, big, cite, code,
+del, dfn, rem, img, ins, kbd, q, s, samp,
+small, strike, strong, sub, sup, tt, var,
+b, u, i, center,
+dl, dt, dd, ol, ul, li,
+fieldset, form, label, legend,
+table, caption, tbody, tfoot, thead, tr, th, td,
+article, aside, canvas, details, rembed, 
+figure, figcaption, footer, header, hgroup, 
+menu, nav, output, ruby, section, summary,
+time, mark, audio, video {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	font-size: 100%;
+	font: inherit;
+	vertical-align: baseline;
+}
+/* HTML5 display-role reset for older browsers */
+article, aside, details, figcaption, figure, 
+footer, header, hgroup, menu, nav, section {
+	display: block;
+}
+body {
+	line-height: 1.4;
+}
+
+ol, ul {
+	list-style: none;
+}
+blockquote, q {
+	quotes: none;
+}
+blockquote:before, blockquote:after,
+q:before, q:after {
+	content: '';
+	content: none;
+}
+table {
+	border-collapse: collapse;
+	border-spacing: 0;
+}
+/* reset css 끝 */
+
+/* webfont */
+
+@font-face {
+    font-family: 'Paperlogy-4Regular';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-4Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Paperlogy-8ExtraBold';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-8ExtraBold.woff2') format('woff2');
+    font-weight: 800;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Paperlogy-9Black';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-9Black.woff2') format('woff2');
+    font-weight: 900;
+    font-style: normal;
+}
+/* 기본스타일 */
+
+* {
+  box-sizing: border-box;
+  -webkit-box-sizing: border-box;
+}
+
+html {
+  font-size: 12px;
+}
+
+body {
+  font-family: 'Paperlogy-4Regular';
+  font-size: 14px;
+}
+
+/* 기본 공통 스타일 */
+input[type="text"],
+input[type="number"],
+input[type="range"],
+input[type="password"],
+input[type="email"],
+select,
+textarea {
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    background-color: #f5f7f9;
+    border: 0px;
+    font-size: 14px; /* 약 16px */
+    border-radius: 100px; /* 5px */
+    padding: 0 1.25rem; /* 10px 20px */
+    height: 3rem;
+    min-width: 6rem; /* 64px */
+    outline: none;
+    transition: border 0.2s ease, box-shadow 0.2s ease;
+    width: 100%;
+    box-sizing: border-box;
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+select:focus,
+textarea:focus {
+    border-color: #85d8ea;
+    box-shadow: 0 0 0 2px #85d8ea4d;
+}
+/* 체크박스 & 라디오 */
+input[type="checkbox"],
+input[type="radio"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: inline-block;
+    position: relative;
+    margin-right: 6px;
+    cursor: pointer;
+    vertical-align: middle;
+    background-color: #ffffff;
+    border: 1px solid #ccc;
+}
+input[type="checkbox"]:checked::before {
+    content: "✔";
+    position: absolute;
+    top: 0px;
+    left: 3px;
+    font-size: 14px;
+    color: #85d8ea;
+}
+input[type="radio"] {
+    border-radius: 50%;
+}
+input[type="radio"]:checked::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    margin-top: -4px;
+    background: #85d8ea;
+    border-radius: 50%;
+}
+/* 슬라이더 (range) */
+input[type="range"] {
+    height: 6px;
+    background: #ffffff;
+    border-radius: 3px;
+    outline: none;
+    padding: 0;
+    margin: 8px 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #85d8ea;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+    transition: background 0.2s ease;
+}
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #85d8ea;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+input[type='number']::-webkit-inner-spin-button, 
+input[type='number']::-webkit-outer-spin-button { 
+    -webkit-appearance: none;
+    margin: 0;
+}
+/* select 스타일 */
+select {
+    background: #f5f7f9 url("data:image/svg+xml;utf8,<svg fill='gray' height='12' viewBox='0 0 24 24' width='12' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>") no-repeat right 10px center;
+    background-size: 14px;
+    padding-right: 32px;
+    cursor: pointer;
+}
+button {
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    font-size: 14px; /* 약 16px */
+    border-radius: 100px; /* 5px */
+    height: 3rem;
+    padding: 0;
+    cursor: pointer;
+    min-width: 5rem; /* 64px */
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+button.btn-icon {
+    min-width: 0;
+    height: 3rem;
+    width: 3rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+button.btn-mint {
+    color: #ffffff;
+    background: #85d8ea;
+    background: linear-gradient(125deg, #85d8ea, #a399f2);
+    border: 0;
+    position: relative;
+    overflow: hidden;
+}
+button.btn-mint span {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    color: #fff;
+    align-items: center;
+    justify-content: center;
+    transition: all .3s ease-in-out;
+}
+button.btn-mint:hover span {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+/* 보라색 버튼 (새로 추가) */
+button.btn-purple {
+    color: #ffffff;
+    background-color: #aaa1f3;
+    border: 1px solid #aaa1f3;
+}
+button.btn-purple:hover {
+    background-color: #978bf1;
+    border-color: #978bf1;
+}
+button.btn-purple:active {
+    background-color: #8477ef;
+    border-color: #8477ef;
+}
+button.btn-white {
+    background-color: #fff;
+    border: 1px solid #ddd;
+}
+button.btn-white:hover {
+    background-color: #f5f5f5;
+    border-color: #ccc;
+}
+button.btn-white:active {
+    background-color: #eaeaea;
+    border-color: #bbb;
+}
+button.btn-sky {
+    color: #fff;
+    background-color: #2196f3;
+    border: 1px solid #2196f3;
+}
+button.btn-sky:hover {
+    background-color: #1976d2;
+    border-color: #1976d2;
+}
+button.btn-sky:active {
+    background-color: #1565c0;
+    border-color: #1565c0;
+}
+button.btn-red {
+    color: #fff;
+    background-color: #f44336;
+    border: 1px solid #f44336;
+}
+button.btn-red:hover {
+    background-color: #d32f2f;
+    border-color: #d32f2f;
+}
+button.btn-red:active {
+    background-color: #b71c1c;
+    border-color: #b71c1c;
+}
+button:disabled {
+    background-color: #ccc;
+    border-color: #ccc;
+    color: #666;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: 0.7;
+}
+/* disabled 추가 */
+/* input, select, textarea */
+input[type="text"]:disabled,
+input[type="number"]:disabled,
+input[type="range"]:disabled,
+select:disabled,
+textarea:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    border-color: #ddd;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* checkbox & radio */
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+    background-color: #f0f0f0;
+    border-color: #ddd;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+input[type="checkbox"]:disabled:checked::before,
+input[type="radio"]:disabled:checked::before {
+    color: #bbb;
+    background-color: #bbb;
+}
+
+/* range */
+input[type="range"]:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+input[type="range"]:disabled::-webkit-slider-thumb,
+input[type="range"]:disabled::-moz-range-thumb {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+
+/* 기본 정의 완료 */
+
+body {
+    min-height: 100vh;
+    padding: 5rem;
+    background: #85d8ea;
+    background: linear-gradient(125deg, #85d8ea, #a399f2);
+}
+
+.avatar {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+}
+
+.title {
+    font-family: 'Paperlogy-8ExtraBold';
+    text-align: center;
+    font-size: 24px;
+    padding-bottom: 1rem;
+    position: relative;
+    color: #fff;
+    background: #85d8ea;
+    background: linear-gradient(125deg, #85d8ea, #a399f2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+}
+
+.title,
+.wrapper {
+}
+
+.wrapper {
+    display: flex;
+    gap: 1rem;
+    flex-direction: column;
+    max-width: 1100px;
+    width: 100%;
+}
+
+.avatar-comparison,
+.comparison-result {
+    background-color: #fff;
+    border-radius: 2rem;
+    box-shadow: 0 8px 24px #959da533;
+    padding: 2rem;
+}
+
+.avatar-comparison {
+    display: flex;
+    flex-direction: column;
+}
+
+.avatar-comparison .avatar-row {
+    padding: 1rem 0;
+    border-bottom: 1px solid #e4e4e4
+}
+
+.avatar-comparison label {
+    display: block;
+    padding-bottom: 1rem;
+}
+
+.avatar-comparison .avatar-row:first-of-type {
+    padding-top: 0;
+}
+
+.avatar-comparison .avatar-row:last-of-type {
+    padding-bottom: 0;
+    margin-bottom: 1rem;
+}
+
+.search-info > div {
+    padding-bottom: 1rem;
+}
+
+.search-info .info-box {
+    padding: 1rem;
+    border: 2px solid #e4e4e4;
+    border-radius: 1rem;
+}
+
+.search-info .info-box + .info-box {
+    margin-top: 0.5rem;
+}
+
+.avatar-comparison .label {
+    display: block;
+    font-size: 16px;
+    line-height: 20px;
+    padding-bottom: 0.5rem;
+}
+
+.price-result {
+    margin-bottom: 2rem;
+    background: #f5f7f9;
+    border-radius: 1.5rem;
+    padding: 2rem;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: stretch;
+    width: 100%;
+    box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px;
+    position: relative;
+}
+
+.price-result.flex-c {
+    flex-direction: column;
+}
+
+.price-result:last-child {
+    margin-bottom: 0;
+}
+
+.price-result .avatar-thumb {
+    height: 78.8px;
+    width: 78.8px;
+    padding: 4px;
+    background-color: #ffffff;
+    margin-right: 2rem;
+    border-radius: 1rem;
+    
+}
+
+.price-result .avatar-info {
+    flex: 1 1 0;
+}
+
+.price-result .avatar-info > ul > li {
+    margin-bottom: 1rem;
+}
+
+.price-result .avatar-info > ul > li:last-child {
+    margin-bottom: 0;
+}
+
+.price-result .name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.price-result .name strong {
+    font-size: 18px;
+}
+
+.price-result .grade {
+    color:#ffffff;
+    display: flex;
+    width: 100px;
+    height: 24px;
+    border-radius: 100px;
+    align-items: center;
+    justify-content: center;
+}
+
+strong.grade-info {
+    color:#ffffff;
+    display: flex;
+    width: 100px;
+    height: 24px;
+    border-radius: 100px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.legend {
+    background-color: #f39303;
+}
+
+.heroic {
+    background-color: #bf00fe;
+}
+
+.price-result .left {
+    color: #666;
+}
+
+.price-result .left strong {
+    font-weight: 600;
+    color: #c00;
+}
+
+.price-result .badge {
+    padding: 0.2rem 0.5rem;
+    background: #ffffff;
+    border-radius: 5px;
+}
+
+.price-result .badge.row-price {
+    border: 2px solid #aaa1f3;
+    background-color: #aaa1f3;
+    color: #ffffff;
+}
+
+.price-result .badge.best-of-all {
+    border: 2px solid #85d8ea;
+    background-color: #85d8ea;
+    color: #ffffff;
+    vertical-align: text-bottom;
+    margin-left: 0.5rem;
+}
+
+.gold,
+.peon,
+.crystal {
+    display: inline-block;
+    text-indent: -9999px;
+    overflow: hidden;
+    background: url(https://cdn-lostark.game.onstove.com/2018/obt/assets/images/pc/sprite/sprite_deal.png?acd7864243d366f9d1c4) no-repeat 0 0;
+    background-size: 197px 179px;
+    vertical-align: text-bottom;
+    margin: 0 2px;
+    position: relative;
+    top: 1px;
+}
+
+.gold {
+    background-position: -20px -142px;
+    height: 19px;
+    width: 18px;
+}
+
+.peon {
+    background-position: -59px -111px;
+    height: 20px;
+    width: 21px;
+}
+
+.crystal {
+    background-position: 0px -142px;
+    height: 21px;
+    width: 19px;
+}
+
+.mp-0 {
+    margin-bottom: 0!important;
+    padding-bottom: 0!important;
+    border-bottom: 0!important;
+}
+
+.spinning {
+    animation-name: spin;
+    animation-duration: 2500ms;
+    animation-iteration-count: infinite;
+    animation-timing-function: linear;
+}
+
+.price-result.flex-c h3 {
+    width: 100%;
+    text-align: center;
+    font-size: 1.4rem;
+}
+
+.price-result.flex-c .badge {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    z-index: 9;
+        color: #ffffff;
+    display: flex;
+    height: 24px;
+    border-radius: 100px;
+    align-items: center;
+    justify-content: center;
+}
+
+.price-result.flex-c ul {
+    margin: 1rem auto 0;
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 1rem;
+    min-width: 270px;
+}
+
+.price-result.flex-c ul.recom {
+    border: 2px solid #85d8ea;
+    padding: 10px !important;
+}
+
+.price-result.flex-c ul.impact {
+    border: 2px solid #aaa1f3;
+    padding: 10px !important;
+}
+
+.price-result.flex-c ul li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2rem;
+    position: relative;
+    margin-bottom: 0.5rem;
+    height: 24px;
+}
+
+.price-result.flex-c ul li:last-child {
+    margin-bottom: 0;
+}
+
+.price-result.flex-c ul li::after {
+    content: '';
+    width: 100%;
+    height: 0;
+    border-bottom: 1px solid #cccccc;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    z-index: 1;
+    margin-top: -1px;
+}
+
+.price-result.flex-c ul li p {
+    background-color: #ffffff;
+    position: relative;
+    z-index: 2;
+    padding: 0 0.5rem;
+    margin: 0 -0.5rem;
+}
+
+.empty-result {
+    text-align: center;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media screen and (max-width: 900px) {
+    body {
+        padding: 3rem;
+    }   
+    .price-result {
+        flex-direction: column;
+        position: relative;
+        padding: 1rem;
+    }
+    .grade {
+        position: absolute;
+        right: 1rem;
+        top: 1rem;
+    }
+    .price-result .name {
+        margin-top: 1rem;
+    }
+    .price-result.flex-c .badge {
+        top: 1rem;
+        right: 1rem;
+    }
+    @media screen and (max-width: 640px) {
+        body {
+            padding: 2rem;
+        }
+        .avatar-info {
+            width: 100%;
+        }
+        .price-result .avatar-info > ul > li {
+            border-bottom: 1px solid #e4e4e4;
+            padding-bottom: 1rem;
+        }
+        .price-result .avatar-info > ul > li:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+        .price-summary {
+            display: block;
+        }
+        .price-result .badge {
+            margin-top: 0.5rem;
+            display: inline-block;
+        }
+        .price-result.flex-c .badge {
+            margin-top: 0;
+        }
+        @media screen and (max-width: 540px) {
+            .price-result.flex-c .badge {
+                position: static;
+                margin: 0.5rem auto 0;
+            }
+            @media screen and (max-width: 425px) {
+                .price-calcul {
+                    display: block;
+                }
+            }
+        }
+    }
+}
