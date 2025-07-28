@@ -453,7 +453,7 @@ body {
     margin-bottom: 2rem;
     background: #f5f7f9;
     border-radius: 1.5rem;
-    padding: 2rem;
+    padding: 2rem 0;
     display: flex;
     flex-direction: row;
     align-items: flex-start;
@@ -700,7 +700,7 @@ strong.grade-info {
     .price-result {
         flex-direction: column;
         position: relative;
-        padding: 1rem;
+        padding: 1rem 0;
     }
     .grade {
         position: absolute;
