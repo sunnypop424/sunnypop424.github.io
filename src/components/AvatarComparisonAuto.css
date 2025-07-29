@@ -359,7 +359,7 @@ input[type="range"]:disabled::-moz-range-thumb {
 
 body {
     min-height: 100vh;
-    padding: 5rem;
+    padding: 5rem 5rem 10rem;
     background: #85d8ea;
     background: linear-gradient(125deg, #85d8ea, #a399f2);
 }
@@ -695,7 +695,7 @@ strong.grade-info {
 
 @media screen and (max-width: 900px) {
     body {
-        padding: 3rem;
+        padding: 3rem 3rem 6rem;
     }   
     .price-result {
         flex-direction: column;
@@ -716,7 +716,7 @@ strong.grade-info {
     }
     @media screen and (max-width: 640px) {
         body {
-            padding: 2rem;
+            padding: 2rem 2rem 6rem;
         }
         .avatar-info {
             width: 100%;

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './AvatarComparisonAuto.css';
 import { LoaderCircle } from 'lucide-react'
 
 function calculatePeonCost(peonCount, crystalRate) {

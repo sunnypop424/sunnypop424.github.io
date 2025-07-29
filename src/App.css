@@ -34,6 +34,24 @@
   color: #000000;
 }
 
+.kakao-adfit-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  box-shadow: rgba(0, 0, 0, 0.16) 0px 10px 36px 0px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
+  z-index: 999;
+}
+
+.kakao-adfit-container ins {
+  vertical-align: top;
+  max-width: 320px;
+}
+
 @media screen and (max-width: 540px) {
   .tab .none {
     display: none;

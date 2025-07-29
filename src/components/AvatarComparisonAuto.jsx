@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './AvatarComparisonAuto.css';
 import { CircleCheckBig, ThumbsUp } from 'lucide-react';
 
 function AvatarComparisonAuto() {

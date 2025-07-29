@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import './App.css';
+import './components/AvatarComparisonAuto.css';
 import AvatarComparisonAuto from './components/AvatarComparisonAuto';
 import PeonCalculator from './components/PeonCalculator';
+import KakaoAdfit from './components/KakaoAdfit';
 
 function App() {
   const [activeTab, setActiveTab] = useState('peon');
@@ -26,6 +28,7 @@ function App() {
         {activeTab === 'peon' && <PeonCalculator />}
         {activeTab === 'avatar' && <AvatarComparisonAuto />}
       </div>
+      <KakaoAdfit />
     </div>
   );
 }
