@@ -282,7 +282,9 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
         <span className="truncate text-sm">
           {selected ? selected.label : placeholder || "선택"}
         </span>
-        <span className="text-gray-500 text-sm select-none">{open ? "▴" : "▾"}</span>
+        <span className="text-gray-500 text-sm select-none">
+          {open ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+        </span>
       </button>
       {open && createPortal(menu, document.body)}
     </div>
@@ -316,24 +318,18 @@ function ToastStack({ toasts, onClose }){
 
 function NumberInput({
   value,
-  onChange,          // (num|null)=>void
+  onChange,          // (number|null)=>void
   min,
   max,
   step = 1,
   allowFloat = false,
-  zeroOnBlur = true, // blur 시 빈값을 0으로 보정할지 여부
+  zeroOnBlur = true, // blur 시 빈값을 0(or min)으로 보정할지
   className = "",
-  inputProps = {},   // title, placeholder 등 전달용
+  inputProps = {},
 }) {
-  // 외부 value -> 문자열 상태로 보관 (빈값 표현 지원)
   const toStr = (v) => (v === null || v === undefined ? "" : String(v));
-  const [inner, setInner] = useState(toStr(value));
-
-  // 외부 value 변동 동기화
-  useEffect(() => { setInner(toStr(value)); }, [value]);
-
-  // 스크롤로 값 바뀌는 것 방지 (UX 사고 방지)
-  const handleWheel = (e) => e.currentTarget.blur();
+  const [inner, setInner] = React.useState(toStr(value));
+  React.useEffect(() => { setInner(toStr(value)); }, [value]);
 
   const clamp = (n) => {
     let x = n;
@@ -342,44 +338,44 @@ function NumberInput({
     return x;
   };
 
-  const parse = (s) => {
-    if (s === "" || s === "-" || s === "." || s === "-.") return null;
-    const num = allowFloat ? Number(s) : parseInt(s, 10);
-    return Number.isFinite(num) ? num : null;
+  const normalizeOnBlur = (s) => {
+    if (s === "") return zeroOnBlur ? (min ?? 0) : null;
+    let n = Number(s);
+    if (!Number.isFinite(n)) return zeroOnBlur ? (min ?? 0) : null;
+    n = allowFloat ? n : Math.trunc(n);
+    return clamp(n);
   };
 
-  const normalizeForBlur = (s) => {
-    const parsed = parse(s);
-    if (parsed === null) return zeroOnBlur ? (min ?? 0) : null;
-    const clamped = clamp(parsed);
-    // 소수점/정수 처리 & leading zero 제거는 숫자로 강제변환만 해도 해결
-    return allowFloat ? clamped : Math.trunc(clamped);
-  };
+  // 휠로 값 바뀌는 사고 방지(선택)
+  const handleWheel = (e) => e.currentTarget.blur();
 
   return (
     <input
-      type="text" /* <- number 대신 text: 빈 문자열 유지 & 선행 0 제어 */
+      type="number"                     // ← 스핀/키보드 ↑↓ 유지
       inputMode={allowFloat ? "decimal" : "numeric"}
-      value={inner}
+      step={step}
+      min={min}
+      max={max}
+      value={inner}                     // ← "" 허용 (빈 입력 유지)
       onChange={(e) => {
         const v = e.target.value;
-
-        // 숫자/부호/점만 통과 (임시 입력 허용)
-        const ok = allowFloat
-          ? /^-?\d*(\.\d*)?$/.test(v)
-          : /^-?\d*$/.test(v);
-        if (!ok) return;
-
+        if (v === "") {
+          setInner("");
+          onChange?.(null);             // 입력 중 빈값은 null로 보존
+          return;
+        }
+        // number 타입은 브라우저가 숫자형 문자열만 넣어줌(예: "1", "1.2", "1e2")
         setInner(v);
-
-        // onChange는 입력 중에도 호출하되, 빈문자면 null 전달
-        const parsed = parse(v);
-        onChange?.(parsed);
+        const num = Number(v);
+        if (Number.isFinite(num)) {
+          onChange?.(allowFloat ? num : Math.trunc(num)); // 입력 중에도 숫자 전달(필요하면 null로 바꿔도 됨)
+        } else {
+          onChange?.(null);
+        }
       }}
       onBlur={() => {
-        const n = normalizeForBlur(inner);
-        const nextStr = n === null ? "" : String(n);
-        setInner(nextStr);
+        const n = normalizeOnBlur(inner);          // blur 시에만 확정/보정
+        setInner(n == null ? "" : String(n));
         onChange?.(n);
       }}
       onWheel={handleWheel}
@@ -388,6 +384,7 @@ function NumberInput({
     />
   );
 }
+
 
 
 
