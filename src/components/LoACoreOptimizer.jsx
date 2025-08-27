@@ -805,7 +805,7 @@ const onDragStart = () => {
                                   <td className="px-2 py-2">{String(g.point ?? 0)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o1k]} {String(g.o1v)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o2k]} {String(g.o2v)}</td>
-                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(2))}</td>
+                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}</td>
                                 </tr>
                               );
                             }) }
