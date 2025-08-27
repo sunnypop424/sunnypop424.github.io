@@ -133,25 +133,130 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   return filtered.slice(0,200);
 }
 
-/* 우선순위 기반 최적화(그리디): ★현재 배열 순서★(위→아래)가 우선순위 */
-function optimizeByPriority(cores, pool, role, weights){
+
+/* ===== 라운드 로빈 타깃 업그레이드 그리디 ===== */
+function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80) {
   const W = sanitizeWeights(weights);
-  const order = cores.map((c,i)=>({ i, pr:i })).sort((a,b)=>a.pr-b.pr);
 
+  const thresholdsOf = (grade) => CORE_THRESHOLDS[grade];
+  const minOf = (grade) => Math.min(...thresholdsOf(grade));
+  const nextThreshold = (grade, current) => {
+    const arr = thresholdsOf(grade);
+    for (let i=0;i<arr.length;i++){
+      if (arr[i] > (current ?? -Infinity)) return arr[i];
+    }
+    return null;
+  };
+  const bestMinHit = (cands, target) => {
+    // target 이상 달성 조합 중 "딱 넘기는" 걸 우선
+    const ok = cands.filter(ci => (ci.thr.length ? Math.max(...ci.thr) : 0) >= target);
+    if (ok.length === 0) return null;
+    // totalPoint ASC → totalWill ASC → roleSum DESC → score DESC
+    ok.sort((a,b)=>{
+      if (a.totalPoint !== b.totalPoint) return a.totalPoint - b.totalPoint;
+      if (a.totalWill  !== b.totalWill ) return a.totalWill  - b.totalWill;
+      if (a.roleSum    !== b.roleSum   ) return b.roleSum    - a.roleSum;
+      return b.score - a.score;
+    });
+    return ok[0];
+  };
+  const bestScore = (cands) => cands.sort((a,b)=>b.score-a.score)[0] || null;
+
+  // 코어별 현재 pick과 남은 젬 풀
   /** @type {ComboInfo[]} */
-  const picks = Array.from({length: cores.length}, ()=>({ list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 }));
-
+  const picks = Array.from({length: cores.length}, () => ({ list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 }));
   let remaining = pool.slice();
-  for(const { i } of order){
+
+  // 후보 생성기 (풀과 조건에 따라 매번 생성)
+  const candidatesFor = (core, gemPool) => {
+    const list = enumerateCoreCombos(gemPool, core.grade, role, W, core.minThreshold, core.enforceMin)
+      .filter(ci => ci.list.length > 0)
+      .sort((a,b)=>b.score-a.score)
+      .slice(0, perCoreLimit);
+    return list;
+  };
+
+  // 젬 사용/반납 헬퍼
+  const removeUsed = (gemPool, combo) => {
+    if (!combo || !combo.list) return gemPool;
+    const used = new Set(combo.list.map(g=>g.id));
+    return gemPool.filter(g=>!used.has(g.id));
+  };
+  const returnUsed = (gemPool, combo) => {
+    if (!combo || !combo.list) return gemPool;
+    // 이미 들어있는지 체크해서 중복 삽입 방지
+    const inPool = new Set(gemPool.map(g=>g.id));
+    const add = combo.list.filter(g=>!inPool.has(g.id));
+    return gemPool.concat(add);
+  };
+
+  // 1) 1라운드: 강제 최소(effMin) 먼저 전부 달성 (가능하면)
+  for (let i=0;i<cores.length;i++){
     const c = cores[i];
-    const cand = enumerateCoreCombos(remaining, c.grade, role, W, c.minThreshold, c.enforceMin);
-    const choice = cand.find(ci=>ci.list.length>0) || cand[0] || { list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 };
-    picks[i] = choice;
-    const chosenIds = new Set(choice.list.map(g=>g.id));
-    remaining = remaining.filter(g=>!chosenIds.has(g.id));
+    const effMin = (c.minThreshold ?? minOf(c.grade));
+    const cands = candidatesFor(c, remaining);
+
+    let choice = null;
+    if (c.enforceMin) {
+      choice = bestMinHit(cands, effMin) || bestScore(cands);
+    } else {
+      // 비강제: 점수 높은 거
+      choice = bestScore(cands);
+    }
+    picks[i] = choice || { list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 };
+    remaining = removeUsed(remaining, picks[i]);
   }
+
+  // 2) 모두 목표(effMin) 달성했는지 확인
+  const allMinOk = cores.every((c, i) => {
+    if (!c.enforceMin) return true; // 비강제는 패스
+    const effMin = (c.minThreshold ?? minOf(c.grade));
+    const maxThr = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
+    return maxThr >= effMin;
+  });
+
+  if (!allMinOk) {
+    // 최소도 안 되는 상황이면 여기서 종료(현 그리디 결과 반환)
+    return { picks };
+  }
+
+  // 3) 라운드 로빈 업그레이드: 1→2→3 코어 다음 구간, 그 다음 라운드엔 다다음 구간…
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+
+    for (let i=0;i<cores.length;i++){
+      const c = cores[i];
+      // 현재 달성 구간(없으면 0)
+      const curMax = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
+      const nxt = nextThreshold(c.grade, curMax);
+      if (nxt == null) continue; // 더 이상 업그레이드 구간 없음
+
+      // 이 코어가 쓰던 젬을 잠시 반환하고, 업그레이드 시도
+      let poolWithRefund = returnUsed(remaining, picks[i]);
+      const cands = candidatesFor(c, poolWithRefund);
+      const upgrade = bestMinHit(cands, nxt);
+
+      if (upgrade) {
+        // 성공: 새 픽으로 교체
+        //  - 기존 픽 젬은 refund 상태에서 제거되었을 것이므로, 남은 풀은 새 픽 사용분만 빼면 됨
+        picks[i] = upgrade;
+        // poolWithRefund에서 새 픽 사용 젬을 제거 → 그게 새로운 remaining
+        const used = new Set(upgrade.list.map(g=>g.id));
+        remaining = poolWithRefund.filter(g=>!used.has(g.id));
+        progressed = true;
+      } else {
+        // 실패: 반환했던 걸 되돌리기(= 아무 변화 없이 유지)
+        // remaining은 그대로(환불 전 상태)여야 하므로, 아무 것도 건드리지 않음
+        // (위에서 poolWithRefund를 지역변수로만 썼기 때문에 remaining 불변)
+      }
+    }
+  }
+
   return { picks };
 }
+
+
 
 /* =============================== Portal-aware Draggable =============================== */
 const dragPortal = typeof document !== "undefined" ? document.body : null;
@@ -426,8 +531,10 @@ const moveCoreDown = (index) => setCores(prev => {
 });
 
 
-  const { picks: priorityPicks } = useMemo(()=> optimizeByPriority(cores, gems, role, weights), [cores, gems, role, weights]);
-
+  const { picks: priorityPicks } = useMemo(
+    () => optimizeRoundRobinTargets(cores, gems, role, weights, /* perCoreLimit */ 80),
+    [cores, gems, role, weights]
+  );
   const resetWeights = ()=> setWeights({...DEFAULT_WEIGHTS});
   const addGem = ()=> {
     const id = uid();
