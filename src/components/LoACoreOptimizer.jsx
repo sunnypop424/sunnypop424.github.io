@@ -399,15 +399,8 @@ export default function LoACoreOptimizer(){
   const [weights, setWeights] = useState({...DEFAULT_WEIGHTS});
   const [highlightCoreId, setHighlightCoreId] = useState(null);   // 최근 추가 코어 ID
   const [highlightGemId, setHighlightGemId] = useState(null); 
-  const [cores, setCores] = useState([
-    { id: uid(), name: "해 코어", grade: "RELIC", minThreshold: undefined, enforceMin: false }
-  ]);
-  const [gems, setGems] = useState([
-    { id: uid(), will: 4, point: 5, o1k:"atk", o1v:3, o2k:"add", o2v:5 },
-    { id: uid(), will: 5, point: 5, o1k:"atk", o1v:5, o2k:"brand", o2v:5 },
-    { id: uid(), will: 5, point: 5, o1k:"allyDmg", o1v:5, o2k:"brand", o2v:5 },
-    { id: uid(), will: 3, point: 4, o1k:"boss", o1v:4, o2k:"add", o2v:2 },
-  ]);
+  const [cores, setCores] = useState([]);
+  const [gems, setGems] = useState([]);
   const { toasts, push, remove } = useToasts();
 
   
@@ -550,8 +543,8 @@ const onDragStart = () => {
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90 ring-primary" onClick={addCore} aria-label="코어 추가"><Plus size={16}/><span className="hidden lg:inline"> 코어 추가</span></button>
             </div>
           </div>
-          <p className="hidden lg:block text-xs text-gray-600 mt-2">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
-          <p className="block lg:hidden text-xs text-gray-600 mt-2">화살표로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
+          <p className="hidden lg:block text-xs text-gray-600">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
+          <p className="block lg:hidden text-xs text-gray-600">화살표로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
 
           <div className="mt-3">
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -618,6 +611,7 @@ const onDragStart = () => {
                 )}
               </Droppable>
             </DragDropContext>
+            {cores.length===0 && <div className="text-sm text-gray-700 p-2 text-center">코어를 추가하세요. (최대 3개의 코어까지 추가할 수 있습니다)</div>}
           </div>
         </section>
 
@@ -713,7 +707,7 @@ const onDragStart = () => {
                 </div>
               </div>
             ))}
-            {gems.length===0 && <div className="text-sm text-gray-700 p-2">젬을 추가하세요. (코어당 최대 4개가 배정됩니다)</div>}
+            {gems.length===0 && <div className="text-sm text-gray-700 p-2 text-center">젬을 추가하세요.</div>}
           </div>
         </section>
 
@@ -746,6 +740,7 @@ const onDragStart = () => {
         {/* 결과 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
+          <p className="hidden lg:block text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
           <div className="space-y-4 mt-2">
             {cores.map((c,i)=> {
               const supply = CORE_SUPPLY[c.grade];
