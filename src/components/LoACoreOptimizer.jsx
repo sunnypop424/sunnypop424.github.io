@@ -5,12 +5,13 @@ import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import KakaoAdfit from "./KakaoAdfit";
+import './LoACoreOptimizer.css';
 
 /* =============================== 타입(주석용 정의) =============================== */
 /** @typedef {"dealer"|"support"} Role */
 /** @typedef {"atk"|"add"|"boss"|"brand"|"allyDmg"|"allyAtk"} OptionKey */
 /** @typedef {"HERO"|"LEGEND"|"RELIC"|"ANCIENT"} CoreGrade */
-/** @typedef {{id:string, will:number, point:number, o1k:OptionKey, o1v:number, o2k:OptionKey, o2v:number}} Gem */
+/** @typedef {{id:string, will:number|null, point:number|null, o1k:OptionKey, o1v:number|null, o2k:OptionKey, o2v:number|null}} Gem */
 /** @typedef {{[k in OptionKey]: number}} Weights */
 /** @typedef {{ id:string, name:string, grade:CoreGrade, minThreshold?:number, enforceMin:boolean }} CoreDef */
 /** @typedef {{ list: Gem[], totalWill:number, totalPoint:number, thr:number[], roleSum:number, score:number }} ComboInfo */
@@ -82,8 +83,8 @@ function thresholdsHit(grade, totalPoint){
   return th.filter(t => totalPoint >= t);
 }
 function scoreCombo(combo, grade, role, weights){
-  const totalWill = combo.reduce((s,g)=>s+(g.will||0),0);
-  const totalPoint = combo.reduce((s,g)=>s+(g.point||0),0);
+  const totalWill = combo.reduce((s,g)=>s+((g.will ?? 0)),0);
+  const totalPoint = combo.reduce((s,g)=>s+((g.point ?? 0)),0);
   const thr = thresholdsHit(grade, totalPoint);
   const roleSum = combo.reduce((s,g)=>s+scoreGemForRole(g, role, weights),0);
   const score = (thr.length*10_000_000) + (totalPoint*10_000) + ((5_000 - totalWill)*10) + roleSum - combo.length;
@@ -313,20 +314,90 @@ function ToastStack({ toasts, onClose }){
   );
 }
 
+function NumberInput({
+  value,
+  onChange,          // (num|null)=>void
+  min,
+  max,
+  step = 1,
+  allowFloat = false,
+  zeroOnBlur = true, // blur 시 빈값을 0으로 보정할지 여부
+  className = "",
+  inputProps = {},   // title, placeholder 등 전달용
+}) {
+  // 외부 value -> 문자열 상태로 보관 (빈값 표현 지원)
+  const toStr = (v) => (v === null || v === undefined ? "" : String(v));
+  const [inner, setInner] = useState(toStr(value));
+
+  // 외부 value 변동 동기화
+  useEffect(() => { setInner(toStr(value)); }, [value]);
+
+  // 스크롤로 값 바뀌는 것 방지 (UX 사고 방지)
+  const handleWheel = (e) => e.currentTarget.blur();
+
+  const clamp = (n) => {
+    let x = n;
+    if (min != null && x < min) x = min;
+    if (max != null && x > max) x = max;
+    return x;
+  };
+
+  const parse = (s) => {
+    if (s === "" || s === "-" || s === "." || s === "-.") return null;
+    const num = allowFloat ? Number(s) : parseInt(s, 10);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const normalizeForBlur = (s) => {
+    const parsed = parse(s);
+    if (parsed === null) return zeroOnBlur ? (min ?? 0) : null;
+    const clamped = clamp(parsed);
+    // 소수점/정수 처리 & leading zero 제거는 숫자로 강제변환만 해도 해결
+    return allowFloat ? clamped : Math.trunc(clamped);
+  };
+
+  return (
+    <input
+      type="text" /* <- number 대신 text: 빈 문자열 유지 & 선행 0 제어 */
+      inputMode={allowFloat ? "decimal" : "numeric"}
+      value={inner}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        // 숫자/부호/점만 통과 (임시 입력 허용)
+        const ok = allowFloat
+          ? /^-?\d*(\.\d*)?$/.test(v)
+          : /^-?\d*$/.test(v);
+        if (!ok) return;
+
+        setInner(v);
+
+        // onChange는 입력 중에도 호출하되, 빈문자면 null 전달
+        const parsed = parse(v);
+        onChange?.(parsed);
+      }}
+      onBlur={() => {
+        const n = normalizeForBlur(inner);
+        const nextStr = n === null ? "" : String(n);
+        setInner(nextStr);
+        onChange?.(n);
+      }}
+      onWheel={handleWheel}
+      className={className}
+      {...inputProps}
+    />
+  );
+}
+
+
+
 /* =============================== 메인 앱 =============================== */
 export default function LoACoreOptimizer(){
-  useEffect(()=>{
-    const href = "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/variable/pretendardvariable-dynamic-subset.css";
-    const id = "pretendard-var-css";
-    if(!document.getElementById(id)){
-      const link = document.createElement("link");
-      link.id = id; link.rel = "stylesheet"; link.href = href;
-      document.head.appendChild(link);
-    }
-  },[]);
 
   const [role, setRole] = useState("dealer");
   const [weights, setWeights] = useState({...DEFAULT_WEIGHTS});
+  const [highlightCoreId, setHighlightCoreId] = useState(null);   // 최근 추가 코어 ID
+  const [highlightGemId, setHighlightGemId] = useState(null); 
   const [cores, setCores] = useState([
     { id: uid(), name: "해 코어", grade: "RELIC", minThreshold: undefined, enforceMin: false }
   ]);
@@ -357,21 +428,31 @@ const moveCoreDown = (index) => setCores(prev => {
   const { picks: priorityPicks } = useMemo(()=> optimizeByPriority(cores, gems, role, weights), [cores, gems, role, weights]);
 
   const resetWeights = ()=> setWeights({...DEFAULT_WEIGHTS});
-  const addGem = ()=> setGems(v=>[
-    { id: uid(), will: 4, point: 4, o1k:"atk", o1v:0, o2k:"add", o2v:0 },
-    ...v
-  ]);
-  const removeGem = (id)=> setGems(v=> v.filter(g=> g.id!==id));
+  const addGem = ()=> {
+    const id = uid();
+    setGems(v => [{ id, will: null, point: null, o1k:"atk", o1v:0, o2k:"add", o2v:0 }, ...v]);
+    setHighlightGemId(id);
+  };
+
+  const removeGem = (id)=> {
+    setGems(v=> v.filter(g=> g.id!==id));
+    if (highlightGemId === id) setHighlightGemId(null);
+  };
   const updateGem = (id, patch) => setGems(v => v.map(g => g.id === id ? { ...g, ...patch } : g));
 
   const addCore = ()=> setCores(cs=>{
     if(cs.length >= 3){ push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
+    const id = uid();
+    setHighlightCoreId(id);
     return [
-      { id: uid(), name: "해 코어", grade: "RELIC", minThreshold: undefined, enforceMin: false },
+      { id, name: "해 코어", grade: "RELIC", minThreshold: undefined, enforceMin: false },
       ...cs
     ];
   });
-  const removeCore = (id)=> setCores(cs=> cs.length<=1 ? cs : cs.filter(c=> c.id!==id));
+  const removeCore = (id)=> {
+    setCores(cs=> cs.length<=1 ? cs : cs.filter(c=> c.id!==id));
+    if (highlightCoreId === id) setHighlightCoreId(null);
+  };
   const updateCore = (id, patch)=> setCores(cs=> cs.map(c=> c.id===id? {...c, ...patch}: c));
 
   // Drag state (for backdrop blur toggle)
@@ -398,7 +479,7 @@ const onDragStart = () => {
   // UI tokens (모바일 최적화 포함)
   const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
-  const card = "bg-white rounded-2xl shadow-sm border";
+  const card = "bg-white rounded-2xl shadow-sm";
   const chip = "px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs lg:text-[13px]";
   const labelCls = "block text-xs text-gray-500 mb-1";
 
@@ -429,7 +510,6 @@ const onDragStart = () => {
 
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{
-      fontFamily:"Pretendard Variable, Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif",
       backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)",
       backgroundAttachment: 'fixed'
     }}>
@@ -449,12 +529,12 @@ const onDragStart = () => {
         {/* 타이틀 + 포지션(우측) */}
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow">로아 아크그리드 코어젬 최적화</h1>
+            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow">로아 아크그리드 코어젬 도우미</h1>
             <div className="flex gap-2 w-full lg:w-auto">
-              <button onClick={()=>setRole('dealer')} className={`h-10 inline-flex items-center justify-center lg:justify-start gap-1 px-3 rounded-xl border w-full lg:w-auto ${role==='dealer'? 'btn-primary':'bg-white'}`}>
+              <button onClick={()=>setRole('dealer')} className={`min-w-[80px] h-10 inline-flex items-center justify-center gap-1 px-3 rounded-xl w-full lg:w-auto ${role==='dealer'? 'bg-white':'bg-white opacity-50'}`}>
                 딜러
               </button>
-              <button onClick={()=>setRole('support')} className={`h-10 inline-flex items-center justify-center lg:justify-start gap-1 px-3 rounded-xl border w-full lg:w-auto ${role==='support'? 'btn-primary':'bg-white'}`}>
+              <button onClick={()=>setRole('support')} className={`min-w-[80px] h-10 inline-flex items-center justify-center gap-1 px-3 rounded-xl w-full lg:w-auto ${role==='support'? 'bg-white':'bg-white opacity-50'}`}>
                 서포터
               </button>
             </div>
@@ -462,14 +542,15 @@ const onDragStart = () => {
         </section>
 
         {/* 코어 입력 (DnD 우선순위) */}
-        <section className={`${card} p-4 lg:p-6 bg-white/95 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>코어 입력</h2>
             <div className="flex items-center gap-2 ml-auto whitespace-nowrap">
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90 ring-primary" onClick={addCore} aria-label="코어 추가"><Plus size={16}/><span className="hidden lg:inline"> 코어 추가</span></button>
             </div>
           </div>
-          <p className="text-xs text-gray-600 mt-2">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
+          <p className="hidden lg:block text-xs text-gray-600 mt-2">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
+          <p className="block lg:hidden text-xs text-gray-600 mt-2">화살표로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
 
           <div className="mt-3">
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
@@ -485,7 +566,7 @@ const onDragStart = () => {
                       return (
                         <PortalAwareDraggable key={c.id} draggableId={c.id} index={idx}>
                           {(prov)=> (
-                            <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps} className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible" style={prov.draggableProps.style}>
+                            <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible ${c.id===highlightCoreId ? 'LoA-highlight' : ''}`} style={prov.draggableProps.style}>
                               {/* Index badge - 모바일 좌측 정렬, 데스크톱 중앙 정렬 */}
                               <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl self-start lg:self-center">#{displayIndexCore(idx)}</div>
 
@@ -514,7 +595,7 @@ const onDragStart = () => {
                                   <input id={`enf-${c.id}`} type="checkbox" className="accent-primary" checked={c.enforceMin} onChange={(e)=>updateCore(c.id,{enforceMin:e.target.checked})}/>
                                   <label htmlFor={`enf-${c.id}`} className="text-sm">목표 구간 강제</label>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">선택 안 함이면 내부적으로 <b className="text-primary">{minOfGrade}P</b> 최소 구간을 기본 목표로 적용합니다.</p>
+                                <p className="text-xs text-gray-500 mt-1">선택 안 함이면 내부적으로 <br className="hidden lg:block"/>최소 구간 <b className="text-primary">{minOfGrade}P</b>을 기본 목표로 적용합니다.</p>
                               </div>
 
                               {/* 모바일: 순서 버튼 + 삭제 버튼 묶음 */}
@@ -540,7 +621,7 @@ const onDragStart = () => {
         </section>
 
         {/* 젬 입력 */}
-        <section className={`${card} p-4 lg:p-6 bg-white/95 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3 mb-3">
             <h2 className={sectionTitle}>젬 입력</h2>
             <div className="flex gap-2 ml-auto whitespace-nowrap">
@@ -551,18 +632,36 @@ const onDragStart = () => {
 
           <div className="flex flex-col gap-3">
             {gems.map((g,idx)=> (
-              <div key={g.id} className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white">
+              <div key={g.id} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white ${g.id===highlightGemId ? 'LoA-highlight' : ''}`}>
                 <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none">#{displayIndexGem(idx, gems.length)}</div>
 
                 {/* 필요 의지력 + 포인트 */}
                 <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
                   <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
                     <label className={labelCls}>필요 의지력</label>
-                    <input type="number" min={0} step="1" title="의지력" className={`${smallFieldBase} w-full lg:w-24`} value={g.will} onChange={e=>updateGem(g.id,{will: Number(e.target.value)})} placeholder="의지력"/>
+                    <NumberInput
+                      value={g.will }
+                      onChange={(v)=>updateGem(g.id,{will: v })}
+                      min={0}
+                      max={9}
+                      step={1}
+                      allowFloat={false}
+                      className={`${smallFieldBase} w-full lg:w-24`}
+                      inputProps={{ title:"의지력", placeholder:"의지력" }}
+                    />
                   </div>
                   <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
                     <label className={labelCls}>(질서/혼돈)포인트</label>
-                    <input type="number" min={0} step="1" title="포인트" className={`${smallFieldBase} w-full lg:w-24`} value={g.point} onChange={e=>updateGem(g.id,{point: Number(e.target.value)})} placeholder="포인트"/>
+                    <NumberInput
+                      value={g.point }
+                      onChange={(v)=>updateGem(g.id,{point: v })}
+                      min={0}
+                      max={9}
+                      step={1}
+                      allowFloat={false}
+                      className={`${smallFieldBase} w-full lg:w-24`}
+                      inputProps={{ title:"포인트", placeholder:"포인트" }}
+                    />
                   </div>
                 </div>
 
@@ -574,7 +673,16 @@ const onDragStart = () => {
                   </div>
                   <div className="flex-1 lg:flex-none">
                     <label className={labelCls}>수치</label>
-                    <input type="number" step="1" className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20" value={g.o1v} onChange={e=>updateGem(g.id,{o1v: Number(e.target.value)})} placeholder="0"/>
+                    <NumberInput
+                      value={g.o1v }
+                      onChange={(v)=>updateGem(g.id,{o1v: v })}
+                      min={0}
+                      max={9}
+                      step={1}
+                      allowFloat={false}
+                      className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+                      inputProps={{ placeholder:"0" }}
+                    />
                   </div>
                 </div>
 
@@ -586,7 +694,16 @@ const onDragStart = () => {
                   </div>
                   <div className="flex-1 lg:flex-none">
                     <label className={labelCls}>수치</label>
-                    <input type="number" step="1" className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20" value={g.o2v} onChange={e=>updateGem(g.id,{o2v: Number(e.target.value)})} placeholder="0"/>
+                    <NumberInput
+                      value={g.o2v }
+                      onChange={(v)=>updateGem(g.id,{o2v: v })}
+                      min={0}
+                      max={9}
+                      step={1}
+                      allowFloat={false}
+                      className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+                      inputProps={{ placeholder:"0" }}
+                    />
                   </div>
                 </div>
 
@@ -600,7 +717,7 @@ const onDragStart = () => {
         </section>
 
         {/* 유효옵션 가중치 */}
-        <section className={`${card} p-4 lg:p-6 bg-white/95 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>유효옵션 가중치</h2>
             <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={resetWeights} aria-label="가중치 초기화"><RotateCcw size={16}/><span className="hidden lg:inline"> 가중치 초기화</span></button>
@@ -610,13 +727,14 @@ const onDragStart = () => {
               {OPTIONS.map((k) => (
                 <div key={k} className="bg-gray-50 border rounded-xl px-2 py-2 w-full lg:w-1/6 min-w-[120px]">
                   <label className={labelCls}>{OPTION_LABELS[k]}</label>
-                  <input
-                    type="number"
-                    step="0.1"
+                  <NumberInput
+                    value={weights[k] }
+                    onChange={(v)=> setWeights((w)=> ({ ...w, [k]: (v ) }))}
                     min={0}
+                    max={5}
+                    step={0.0001}
+                    allowFloat={true}
                     className="h-10 w-full px-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50"
-                    value={String(weights[k])}
-                    onChange={(e) => setWeights((v) => ({ ...v, [k]: Number(e.target.value) }))}
                   />
                 </div>
               ))}
@@ -625,7 +743,7 @@ const onDragStart = () => {
         </section>
 
         {/* 결과 */}
-        <section className={`${card} p-4 lg:p-6 bg-white/95 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
           <div className="space-y-4 mt-2">
             {cores.map((c,i)=> {
@@ -641,17 +759,24 @@ const onDragStart = () => {
                     </div>
                     {hasResult && (
                       <div className="flex flex-wrap gap-2 items-center text-[12px] lg:text-[13px]">
-                        <div className={chip}>총 의지력 <span className="font-semibold text-primary">{String(pick.totalWill)}</span> / 공급 <span className="text-primary">{String(supply)}</span> (<span className="text-primary">잔여 {String(supply - pick.totalWill)}</span>)</div>
-                        <div className={chip}>총 포인트 <span className="font-semibold text-primary">{String(pick.totalPoint)}</span></div>
-                        <div className={chip}>달성 구간 <span className="font-semibold text-primary">{pick.thr.length? String(pick.thr.join(", ")): "없음"}</span></div>
-                        <div className={chip}>유효 옵션 합(<span className="font-semibold">{role==='dealer'?"딜러":"서폿"}</span>) <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(2))}</span></div>
+                        <div className={chip}>총 의지력 <span className="font-semibold">{String(pick.totalWill)}</span> / 공급 <span>{String(supply)}</span> (<span>나머지 {String(supply - pick.totalWill)}</span>)</div>
+                        <div className={chip}>총 포인트 <span className="font-semibold">{String(pick.totalPoint)}</span></div>
+                        {(() => {
+                          const maxThr = pick.thr.length ? Math.max(...pick.thr) : null;
+                          return (
+                            <div className={chip}>
+                              달성 구간 <span className="font-semibold">{maxThr != null ? String(maxThr) : "없음"}</span>
+                            </div>
+                          );
+                        })()}
+                        <div className={chip}>유효 옵션 합(<span className="font-semibold">{role==='dealer'?"딜러":"서폿"}</span>) <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}</span></div>
                       </div>
                     )}
                   </div>
 
                   {!hasResult ? (
                     <div className="text-sm text-gray-700 mt-2">
-                      결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 구간 강제 조건을 만족하지 못함{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
+                      결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 구간을 만족하지 못합니다.{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
                     </div>
                   ) : (
                     <>
@@ -675,8 +800,8 @@ const onDragStart = () => {
                               return (
                                 <tr key={g.id} className="border-t">
                                   <td className="px-2 py-2">#{String(disp)}</td>
-                                  <td className="px-2 py-2">{String(g.will)}</td>
-                                  <td className="px-2 py-2 text-primary">{String(g.point)}</td>
+                                  <td className="px-2 py-2">{String(g.will ?? 0)}</td>
+                                  <td className="px-2 py-2">{String(g.point ?? 0)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o1k]} {String(g.o1v)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o2k]} {String(g.o2v)}</td>
                                   <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(2))}</td>

@@ -1,0 +1,40 @@
+@font-face {
+    font-family: 'Paperlogy-4Regular';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-4Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Paperlogy-8ExtraBold';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-8ExtraBold.woff2') format('woff2');
+    font-weight: 800;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Paperlogy-9Black';
+    src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-9Black.woff2') format('woff2');
+    font-weight: 900;
+    font-style: normal;
+}
+
+
+body {
+  font-family: 'Paperlogy-4Regular';
+  font-size: 14px;
+}
+
+/* ================= LoACoreOptimizer.css 추가 ================ */
+@keyframes loaPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(163,153,242,0.55); }
+  50%  { box-shadow: 0 0 0 6px rgba(163,153,242,0.25); }
+  100% { box-shadow: 0 0 0 0 rgba(163,153,242,0.0); }
+}
+.LoA-highlight{
+  position: relative;
+  outline: 2px solid #a399f2;
+  border-color: #a399f2 !important;
+  animation: loaPulse .9s ease-in-out 3;
+  transition: outline-color .2s, border-color .2s, box-shadow .2s;
+}
