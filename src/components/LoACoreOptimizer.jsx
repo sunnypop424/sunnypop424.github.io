@@ -764,7 +764,7 @@ const onDragStart = () => {
         {/* 결과 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
-          <p className="hidden lg:block text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
+          <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
           <div className="space-y-4 mt-2">
             {cores.map((c,i)=> {
               const supply = CORE_SUPPLY[c.grade];
