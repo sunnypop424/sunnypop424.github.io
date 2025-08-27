@@ -568,7 +568,7 @@ const onDragStart = () => {
                               <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl self-start lg:self-center">#{displayIndexCore(idx)}</div>
 
                               <div className="flex flex-col min-w-[120px] w-full lg:w-40">
-                                <label className={labelCls}>코어명</label>
+                                <label className={labelCls}>코어 종류</label>
                                 <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val)=>updateCore(c.id,{name: val})} items={CORE_NAME_ITEMS} placeholder="코어명"/>
                               </div>
 
