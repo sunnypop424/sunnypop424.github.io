@@ -444,7 +444,7 @@ const moveCoreDown = (index) => setCores(prev => {
     ];
   });
   const removeCore = (id)=> {
-    setCores(cs=> cs.length<=1 ? cs : cs.filter(c=> c.id!==id));
+    setCores(cs=> cs.length<=0 ? cs : cs.filter(c=> c.id!==id));
     if (highlightCoreId === id) setHighlightCoreId(null);
   };
   const updateCore = (id, patch)=> setCores(cs=> cs.map(c=> c.id===id? {...c, ...patch}: c));
@@ -599,7 +599,7 @@ const onDragStart = () => {
                                   <button className="h-8 w-8 rounded-lg border inline-flex items-center justify-center bg-white" onClick={()=>moveCoreUp(idx)} aria-label="위로"><ChevronUp size={16}/></button>
                                   <button className="h-8 w-8 rounded-lg border inline-flex items-center justify-center bg-white" onClick={()=>moveCoreDown(idx)} aria-label="아래로"><ChevronDown size={16}/></button>
                                 </div>
-                                <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border-0 lg:border text-red-600 inline-flex items-center justify-center gap-2" onClick={()=>removeCore(c.id)} disabled={cores.length<=1} aria-label="코어 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 삭제</span></button>
+                                <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border-0 lg:border text-red-600 inline-flex items-center justify-center gap-2" onClick={()=>removeCore(c.id)} disabled={cores.length<=0} aria-label="코어 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 삭제</span></button>
                               </div>
                             </div>
                           )}
