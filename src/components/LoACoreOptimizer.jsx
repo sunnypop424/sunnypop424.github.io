@@ -51,6 +51,11 @@ const CORE_NAME_ITEMS = [
 
 /* =============================== 유틸/헬퍼 =============================== */
 
+const CORE_ORDER = ["해 코어","달 코어","별 코어"];
+function nextAvailableCoreName(existingNames){
+  for (const n of CORE_ORDER) if (!existingNames.has(n)) return n;
+  return null; // 모두 사용됨
+}
 
 const uid = () => Math.random().toString(36).slice(2,9);
 
@@ -257,12 +262,14 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
             <button
               type="button"
               onClick={() => {
+                if (it.disabled) return;         // 비활성 항목 클릭 무시
                 onChange(it.value);
                 setOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${
-                it.value === value ? "bg-gray-100" : ""
-              }`}
+              aria-disabled={it.disabled ? true : undefined}
+              className={`w-full text-left px-3 py-2 text-sm ${
+                it.disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
+              } ${it.value === value ? "bg-gray-100" : ""}`}
             >
               <span className="block truncate">{it.label}</span>
             </button>
@@ -435,11 +442,14 @@ const moveCoreDown = (index) => setCores(prev => {
   const updateGem = (id, patch) => setGems(v => v.map(g => g.id === id ? { ...g, ...patch } : g));
 
   const addCore = ()=> setCores(cs=>{
-    if(cs.length >= 3){ push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
+    if (cs.length >= 3) { push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
+    const existing = new Set(cs.map(c=>c.name));
+    const nextName = nextAvailableCoreName(existing);
+    if (!nextName) { push("해/달/별 코어가 모두 추가되어 있어요."); return cs; }
     const id = uid();
     setHighlightCoreId(id);
     return [
-      { id, name: "해 코어", grade: "RELIC", minThreshold: undefined, enforceMin: false },
+      { id, name: nextName, grade: "RELIC", minThreshold: undefined, enforceMin: false },
       ...cs
     ];
   });
@@ -447,7 +457,16 @@ const moveCoreDown = (index) => setCores(prev => {
     setCores(cs=> cs.length<=0 ? cs : cs.filter(c=> c.id!==id));
     if (highlightCoreId === id) setHighlightCoreId(null);
   };
-  const updateCore = (id, patch)=> setCores(cs=> cs.map(c=> c.id===id? {...c, ...patch}: c));
+  const updateCore = (id, patch)=> setCores(cs=>{
+    if ('name' in patch) {
+      const dup = cs.some(c => c.id !== id && c.name === patch.name);
+      if (dup) {
+        push(`${patch.name}는 이미 존재하는 코어입니다`);
+        return cs; // 변경 취소
+      }
+    }
+    return cs.map(c=> c.id===id? {...c, ...patch}: c);
+  });
 
   // Drag state (for backdrop blur toggle)
   const [dragging, setDragging] = useState(false);
@@ -556,6 +575,11 @@ const onDragStart = () => {
                       const targetItems = [{ value: '', label: '(선택 안 함)' }].concat(
                         CORE_THRESHOLDS[c.grade].map(v => ({ value: String(v), label: `${v}P 이상` }))
                       );
+                      const takenNames = new Set(cores.filter(x=>x.id!==c.id).map(x=>x.name));
+                      const coreNameItems = CORE_NAME_ITEMS.map(it => ({
+                        ...it,
+                        disabled: takenNames.has(it.value)
+                      }));
                       const minOfGrade = Math.min(...CORE_THRESHOLDS[c.grade]);
                       return (
                         <PortalAwareDraggable key={c.id} draggableId={c.id} index={idx}>
@@ -566,7 +590,7 @@ const onDragStart = () => {
 
                               <div className="flex flex-col min-w-[120px] w-full lg:w-40">
                                 <label className={labelCls}>코어 종류</label>
-                                <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val)=>updateCore(c.id,{name: val})} items={CORE_NAME_ITEMS} placeholder="코어명"/>
+                                <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val)=>updateCore(c.id,{name: val})} items={coreNameItems} placeholder="코어명"/>
                               </div>
 
                               <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
