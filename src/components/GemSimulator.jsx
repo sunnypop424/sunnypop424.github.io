@@ -69,13 +69,13 @@ const SIM_OPTIONS = [
 const epsilonByTrials = (n) => {
   if (n >= 50000) return 0.002;   // ±0.2%p
   if (n >= 10000) return 0.0035;  // ±0.35%p
-  if (n >= 5000)  return 0.005;   // ±0.5%p
+  if (n >= 5000) return 0.005;   // ±0.5%p
   return 0.007;                   // ±0.7%p
 };
 const batchByTrials = (n) => {
   if (n >= 50000) return 1000;
   if (n >= 10000) return 800;
-  if (n >= 5000)  return 600;
+  if (n >= 5000) return 600;
   return 400;
 };
 
@@ -466,7 +466,7 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
               type="button"
               onClick={() => { if (it.disabled) return; onChange(it.value); setOpen(false); }}
               aria-disabled={it.disabled ? true : undefined}
-              className={`w-full text-left px-3 py-2 text-sm ${it.disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"} ${it.value === value ? "bg-gray-100" : ""}`}
+              className={`w-full text-left px-3 py-2 text-sm ${it.disabled ? "cursor-not-allowed" : "hover:bg-gray-50"} ${it.value === value ? "bg-gray-100" : ""}`}
             >
               <span className="block truncate">{it.label}</span>
             </button>
@@ -482,7 +482,7 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
         type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
-        className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${disabled ? "cursor-not-allowed" : ""}`}
       >
         <span className="truncate text-sm">{selected ? selected.label : placeholder || "선택"}</span>
         <span className="text-gray-500 text-sm select-none">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
@@ -1284,42 +1284,51 @@ export default function GemSimulator() {
 
           {/* 코어 카드와 동일한 레이아웃/간격/높이 */}
           <div className="mt-3">
-            <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible">
-              {/* 젬 타입 */}
-              <div className="flex flex-col min-w-[160px] w-full lg:w-56">
-                <label className={labelCls}>젬 타입</label>
-                <Dropdown
-                  className="w-full lg:w-56"
-                  value={gemKey}
-                  onChange={(v) => setGemKey(v)}
-                  items={Object.keys(GEM_TYPES).map(k => ({ value: k, label: k }))}
-                  placeholder="젬 타입"
-                  disabled={basicLocked}
-                />
-              </div>
+<div
+  className="
+    relative 
+    grid grid-cols-2 gap-2 
+    lg:flex lg:flex-row lg:flex-nowrap lg:gap-3 
+    items-stretch lg:items-end 
+    border rounded-xl p-3 bg-white overflow-visible
+  "
+>
+  {/* 젬 타입 */}
+  <div className={`flex flex-col w-full lg:w-[160px] w-full lg:w-56 ${basicLocked ? "opacity-50" : ""}`}>
+    <label className={labelCls}>젬 타입</label>
+    <Dropdown
+      className="w-full"
+      value={gemKey}
+      onChange={(v) => setGemKey(v)}
+      items={Object.keys(GEM_TYPES).map((k) => ({ value: k, label: k }))}
+      placeholder="젬 타입"
+      disabled={basicLocked}
+    />
+  </div>
 
-              {/* 등급 */}
-              <div className="flex flex-col min-w-[120px] w-full lg:w-40">
-                <label className={labelCls}>등급</label>
-                <Dropdown
-                  className="w-full lg:w-40"
-                  value={rarity}
-                  onChange={(v) => setRarity(v)}
-                  items={["고급", "희귀", "영웅"].map(k => ({ value: k, label: k }))}
-                  placeholder="등급"
-                  disabled={basicLocked}
-                />
-              </div>
+  {/* 등급 */}
+  <div className={`flex flex-col w-full lg:w-[120px] w-full lg:w-40 ${basicLocked ? "opacity-50" : ""}`}>
+    <label className={labelCls}>등급</label>
+    <Dropdown
+      className="w-full"
+      value={rarity}
+      onChange={(v) => setRarity(v)}
+      items={["고급", "희귀", "영웅"].map((k) => ({ value: k, label: k }))}
+      placeholder="등급"
+      disabled={basicLocked}
+    />
+  </div>
 
-              {/* 가공/다른 항목 보기 정보 */}
-              <div className="flex flex-col w-full lg:w-auto">
-                <label className={labelCls}>기본 시도/다른 항목 보기</label>
-                <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center text-sm">
-                  가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 다른 항목 보기{" "}
-                  <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>회
-                </div>
-              </div>
-            </div>
+  {/* 가공/다른 항목 보기 */}
+  <div className="flex flex-col w-full col-span-2 lg:col-span-1 lg:w-auto">
+    <label className={labelCls}>기본 시도/다른 항목 보기</label>
+    <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center text-sm">
+      가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 다른 항목 보기{" "}
+      <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>회
+    </div>
+  </div>
+</div>
+
           </div>
         </section>
 
@@ -1358,9 +1367,15 @@ export default function GemSimulator() {
 
           {/* 2) 현재 옵션 설정 — 입력 블록 교체(간격/폭 기본설정 카드와 동일) */}
           <div className="mt-3">
-            <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible">
+            <div className="
+  relative 
+  grid grid-cols-2 gap-2 
+  lg:flex lg:flex-row lg:flex-nowrap lg:gap-3 
+  items-stretch lg:items-end 
+  border rounded-xl p-3 bg-white overflow-visible
+">
               {/* 의지력 효율 */}
-              <div className="flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px]">
+              <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>의지력 효율</label>
                 <NumberInput
                   value={cur.eff}
@@ -1372,7 +1387,7 @@ export default function GemSimulator() {
               </div>
 
               {/* 포인트 */}
-              <div className="flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px]">
+              <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>포인트</label>
                 <NumberInput
                   value={cur.pts}
@@ -1383,63 +1398,55 @@ export default function GemSimulator() {
                 />
               </div>
 
-              {(() => {
-                const effectsDisabled = curLocked;
-                const effCls = effectsDisabled ? "opacity-50" : "";
-                const disabledPH = effectsDisabled ? "비활성화" : undefined;
-                return (
-                  <>
-                    {/* 효과 A */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[160px] ${effCls}`}>
-                      <label className={labelCls}>효과 A</label>
-                      <Select
-                        value={cur.aName}
-                        set={(v) => setCur({ ...cur, aName: v })}
-                        options={effectPoolByPos}
-                        disabled={effectsDisabled}
-                        placeholder={disabledPH}
-                      />
-                    </div>
+              {/* 효과 A */}
+              <div className={`flex flex-col w-full lg:w-[160px] ${curLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>효과 A</label>
+                <Select
+                  value={cur.aName}
+                  set={(v) => setCur({ ...cur, aName: v })}
+                  options={effectPoolByPos}
+                  disabled={curLocked}
+                  placeholder={curLocked ? "비활성화" : undefined}
+                />
+              </div>
 
-                    {/* A 레벨 */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px] ${effCls}`}>
-                      <label className={labelCls}>효과 A 레벨</label>
-                      <NumberInput
-                        value={cur.aLvl}
-                        set={(v) => setCur({ ...cur, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-                        min={MIN_STAT}
-                        max={MAX_STAT}
-                        disabled={effectsDisabled}
-                      />
-                    </div>
+              {/* A 레벨 */}
+              <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>효과 A 레벨</label>
+                <NumberInput
+                  value={cur.aLvl}
+                  set={(v) => setCur({ ...cur, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+                  min={MIN_STAT}
+                  max={MAX_STAT}
+                  disabled={curLocked}
+                />
+              </div>
 
-                    {/* 효과 B */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[160px] ${effCls}`}>
-                      <label className={labelCls}>효과 B</label>
-                      <Select
-                        value={cur.bName}
-                        set={(v) => setCur({ ...cur, bName: v })}
-                        options={effectPoolByPos.filter((n) => n !== cur.aName)}
-                        disabled={effectsDisabled}
-                        placeholder={disabledPH}
-                      />
-                    </div>
+              {/* 효과 B */}
+              <div className={`flex flex-col w-full lg:w-[160px] ${curLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>효과 B</label>
+                <Select
+                  value={cur.bName}
+                  set={(v) => setCur({ ...cur, bName: v })}
+                  options={effectPoolByPos.filter((n) => n !== cur.aName)}
+                  disabled={curLocked}
+                  placeholder={curLocked ? "비활성화" : undefined}
+                />
+              </div>
 
-                    {/* B 레벨 */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px] ${effCls}`}>
-                      <label className={labelCls}>효과 B 레벨</label>
-                      <NumberInput
-                        value={cur.bLvl}
-                        set={(v) => setCur({ ...cur, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-                        min={MIN_STAT}
-                        max={MAX_STAT}
-                        disabled={effectsDisabled}
-                      />
-                    </div>
-                  </>
-                );
-              })()}
+              {/* B 레벨 */}
+              <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>효과 B 레벨</label>
+                <NumberInput
+                  value={cur.bLvl}
+                  set={(v) => setCur({ ...cur, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+                  min={MIN_STAT}
+                  max={MAX_STAT}
+                  disabled={curLocked}
+                />
+              </div>
             </div>
+
           </div>
 
 
@@ -1508,109 +1515,111 @@ export default function GemSimulator() {
 
           {/* LoACore 코어행과 동일한 한 줄 카드 레이아웃 */}
           <div className="mt-3">
-            <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible">
-              {/* 의지력 효율 ≥ */}
-              <div className="flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px]">
-                <label className={labelCls}>의지력 효율 ≥</label>
-                <NumberInput
-                  value={tgt.eff}
-                  set={(v) => setTgt({ ...tgt, eff: clamp(v, MIN_STAT, MAX_STAT) })}
-                  min={MIN_STAT}
-                  max={MAX_STAT}
-                  disabled={tgtLocked}
-                />
-              </div>
+<div className="
+  relative
+  grid grid-cols-2 gap-2
+  lg:flex lg:flex-row lg:flex-nowrap lg:gap-3
+  items-stretch lg:items-end
+  border rounded-xl p-3 bg-white overflow-visible
+">
+  {/* 의지력 효율 ≥ */}
+  <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
+    <label className={labelCls}>의지력 효율 ≥</label>
+    <NumberInput
+      value={tgt.eff}
+      set={(v) => setTgt({ ...tgt, eff: clamp(v, MIN_STAT, MAX_STAT) })}
+      min={MIN_STAT}
+      max={MAX_STAT}
+      disabled={tgtLocked}
+    />
+  </div>
 
-              {/* 포인트 ≥ */}
-              <div className="flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px]">
-                <label className={labelCls}>포인트 ≥</label>
-                <NumberInput
-                  value={tgt.pts}
-                  set={(v) => setTgt({ ...tgt, pts: clamp(v, MIN_STAT, MAX_STAT) })}
-                  min={MIN_STAT}
-                  max={MAX_STAT}
-                  disabled={tgtLocked}
-                />
-              </div>
+  {/* 포인트 ≥ */}
+  <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
+    <label className={labelCls}>포인트 ≥</label>
+    <NumberInput
+      value={tgt.pts}
+      set={(v) => setTgt({ ...tgt, pts: clamp(v, MIN_STAT, MAX_STAT) })}
+      min={MIN_STAT}
+      max={MAX_STAT}
+      disabled={tgtLocked}
+    />
+  </div>
 
+  {/* 추가 효과 — 모바일에서 col-span-2 */}
+  <div className={`flex flex-col w-full col-span-2 lg:col-span-1 lg:w-[100px] ${tgtLocked ? "opacity-50" : ""}`}>
+    <label className={labelCls}>추가 효과</label>
+    <Dropdown
+      className="w-full lg:w-[100px]"
+      value={pos}
+      onChange={(v) => setPos(v)}
+      items={["상관 없음", "공격형", "지원형"].map(k => ({ value: k, label: k }))}
+      placeholder="추가 효과"
+      disabled={tgtLocked}
+    />
+  </div>
 
-              {/* 추가 효과 */}
-              <div className="flex flex-col min-w-[100px] w-full lg:w-[100px]">
-                <label className={labelCls}>추가 효과</label>
-                <Dropdown
-                  className="w-full lg:w-[100px]"
-                  value={pos}
-                  onChange={(v) => setPos(v)}
-                  items={["상관 없음", "공격형", "지원형"].map(k => ({ value: k, label: k }))}
-                  placeholder="추가 효과"
-                  disabled={tgtLocked}
-                />
-              </div>
+  {(() => {
+    const effectsDisabled = tgtLocked || pos === "상관 없음";
+    const bLevelDisabled = effectsDisabled || abModePrimary !== "BOTH";
+    const effCls = effectsDisabled ? "opacity-50" : "";
+    const effClsB = bLevelDisabled ? "opacity-50" : "";
+    return (
+      <>
+        {/* 목표 이름 A */}
+        <div className={`w-full lg:w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+          <label className={labelCls}>목표 효과 A</label>
+          <Select
+            value={tgtNames.aName}
+            set={(v) => setTgtNames((t) => ({ ...t, aName: v }))}
+            options={abModePrimary === "BOTH"
+              ? targetPool.filter((n) => n !== tgtNames.bName)
+              : targetPool}
+            disabled={tgtLocked || pos === "상관 없음"}
+          />
+        </div>
 
-              {(() => {
-                // 상관 없음이어도 보이게 + 비활성화 처리
-                const effectsDisabled = tgtLocked || pos === "상관 없음";
-                const bLevelDisabled = effectsDisabled || abModePrimary !== "BOTH"; // 🔹 ANY_ONE이면 B 레벨도 비활성
-                const effCls = effectsDisabled ? "opacity-50" : "";
-                const effClsB = bLevelDisabled ? "opacity-50" : "";
-                return (
-                  <>
+        {/* A 레벨 ≥ */}
+        <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effCls}`}>
+          <label className={labelCls}>{tgtALabel}</label>
+          <NumberInput
+            value={tgt.aLvl}
+            set={(v) => setTgt({ ...tgt, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+            min={MIN_STAT}
+            max={MAX_STAT}
+            disabled={effectsDisabled}
+          />
+        </div>
 
-                    {/* 목표 이름 A */}
-                    <div className={`w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
-                      <label className={labelCls}>목표 효과 A</label>
-                      <Select
-                        value={tgtNames.aName}
-                        set={(v) => setTgtNames((t) => ({ ...t, aName: v }))}  // ✅ setter는 무조건 반영
-                        options={abModePrimary === "BOTH"
-                          ? targetPool.filter((n) => n !== tgtNames.bName)      // ✅ BOTH일 때만 B와 중복 제거
-                          : targetPool}
-                        disabled={tgtLocked || pos === "상관 없음"}
-                      />
-                    </div>
+        {/* 목표 이름 B (BOTH일 때만 활성) */}
+        <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
+          <label className={labelCls}>목표 효과 B</label>
+          <Select
+            value={tgtNames.bName}
+            set={(v) => setTgtNames((t) => ({ ...t, bName: v }))}
+            options={abModePrimary === "BOTH"
+              ? targetPool.filter((n) => n !== tgtNames.aName)
+              : targetPool}
+            disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
+          />
+        </div>
 
-                    {/* A 레벨 ≥ */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px] ${effCls}`}>
-                      <label className={labelCls}>{tgtALabel}</label>
-                      <NumberInput
-                        value={tgt.aLvl}
-                        set={(v) => setTgt({ ...tgt, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-                        min={MIN_STAT}
-                        max={MAX_STAT}
-                        disabled={effectsDisabled}
-                      />
-                    </div>
+        {/* B 레벨 ≥ */}
+        <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effClsB}`}>
+          <label className={labelCls}>{tgtBLabel}</label>
+          <NumberInput
+            value={tgt.bLvl}
+            set={(v) => setTgt({ ...tgt, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+            min={MIN_STAT}
+            max={MAX_STAT}
+            disabled={bLevelDisabled}
+          />
+        </div>
+      </>
+    );
+  })()}
+</div>
 
-                    {/* 목표 이름 B (BOTH일 때만 활성) */}
-                    <div className={`w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
-                      <label className={labelCls}>목표 효과 B</label>
-                      <Select
-                        value={tgtNames.bName}
-                        set={(v) => setTgtNames((t) => ({ ...t, bName: v }))}  // ✅ setter는 무조건 반영
-                        options={abModePrimary === "BOTH"
-                          ? targetPool.filter((n) => n !== tgtNames.aName)      // ✅ A와 중복만 제거
-                          : targetPool}
-                        disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
-                      />
-                    </div>
-
-
-                    {/* B 레벨 ≥ */}
-                    <div className={`flex flex-col w-full lg:w-auto lg:flex-none min-w-[120px] ${effClsB}`}>
-                      <label className={labelCls}>{tgtBLabel}</label>
-                      <NumberInput
-                        value={tgt.bLvl}
-                        set={(v) => setTgt({ ...tgt, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-                        min={MIN_STAT}
-                        max={MAX_STAT}
-                        disabled={bLevelDisabled}
-                      />
-                    </div>
-
-                  </>
-                );
-              })()}
-            </div>
           </div>
         </section>
 
@@ -1718,7 +1727,7 @@ export default function GemSimulator() {
 
                 {/* 리소스 칩 */}
                 <div className="mt-3 flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
-                  
+
                   {manual.attemptsLeft <= 0 ? (
                     <div className="inline-flex items-center px-2.5 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-[12px] lg:text-[13px]">
                       가공이 완료되었습니다.
@@ -1877,7 +1886,7 @@ export default function GemSimulator() {
           <div className="flex items-center gap-2">
             <h2 className={sectionTitle}>결과 출력</h2>
             <div className="ml-auto flex items-center gap-2">
-              <span className="px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs text-gray-600">
+              <span className="px-2.5 py-1.5 rounded-xl bg-gray-100 text-[10px] lg:text-xs text-gray-600">
                 Monte Carlo {fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회
                 {resultRun?.ci?.halfWidth
                   ? ` (±${(resultRun.ci.halfWidth * 100).toFixed(2)}%p @95%)`
