@@ -1495,7 +1495,7 @@ export default function GemSimulator() {
         </section>
 
 
-        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* 4) 가공 시뮬레이션 */}
           <section ref={simRef} className={`lg:col-span-2 ` + card}>
             {/* 타이틀 + 우측 액션 */}
