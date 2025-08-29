@@ -543,71 +543,16 @@ function ToastStack({ toasts, onClose }) {
   );
 }
 
-function NumberInput({
-  value,
-  onChange,          // (number|null)=>void
-  min,
-  max,
-  step = 1,
-  allowFloat = false,
-  zeroOnBlur = true, // blur 시 빈값을 0(or min)으로 보정할지
-  className = "",
-  inputProps = {},
-}) {
-  const toStr = (v) => (v === null || v === undefined ? "" : String(v));
-  const [inner, setInner] = React.useState(toStr(value));
-  React.useEffect(() => { setInner(toStr(value)); }, [value]);
-
-  const clamp = (n) => {
-    let x = n;
-    if (min != null && x < min) x = min;
-    if (max != null && x > max) x = max;
-    return x;
-  };
-
-  const normalizeOnBlur = (s) => {
-    if (s === "") return zeroOnBlur ? (min ?? 0) : null;
-    let n = Number(s);
-    if (!Number.isFinite(n)) return zeroOnBlur ? (min ?? 0) : null;
-    n = allowFloat ? n : Math.trunc(n);
-    return clamp(n);
-  };
-
-  // 휠로 값 바뀌는 사고 방지(선택)
-  const handleWheel = (e) => e.currentTarget.blur();
-
+function NumberInput({ value, set, min = MIN_STAT, max = 99, disabled }) {
   return (
     <input
-      type="number"                     // ← 스핀/키보드 ↑↓ 유지
-      inputMode={allowFloat ? "decimal" : "numeric"}
-      step={step}
+      type="number"
+      value={value}
       min={min}
       max={max}
-      value={inner}                     // ← "" 허용 (빈 입력 유지)
-      onChange={(e) => {
-        const v = e.target.value;
-        if (v === "") {
-          setInner("");
-          onChange?.(null);             // 입력 중 빈값은 null로 보존
-          return;
-        }
-        // number 타입은 브라우저가 숫자형 문자열만 넣어줌(예: "1", "1.2", "1e2")
-        setInner(v);
-        const num = Number(v);
-        if (Number.isFinite(num)) {
-          onChange?.(allowFloat ? num : Math.trunc(num)); // 입력 중에도 숫자 전달(필요하면 null로 바꿔도 됨)
-        } else {
-          onChange?.(null);
-        }
-      }}
-      onBlur={() => {
-        const n = normalizeOnBlur(inner);          // blur 시에만 확정/보정
-        setInner(n == null ? "" : String(n));
-        onChange?.(n);
-      }}
-      onWheel={handleWheel}
-      className={className}
-      {...inputProps}
+      disabled={disabled}
+      onChange={(e) => set(clamp(parseInt(e.target.value || String(MIN_STAT), 10), min ?? MIN_STAT, max ?? 99))}
+      className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white"
     />
   );
 }
@@ -1193,7 +1138,6 @@ export default function GemSimulator() {
     if (pos === "상관 없음") return base;
     return abModePrimary === "ANY_ONE" ? ["상관없음", ...base] : base; // BOTH면 '상관없음' 제외
   }, [gemKey, pos, abModePrimary]);
-  const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
 
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{ backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)", backgroundAttachment: "fixed" }}>
@@ -1342,7 +1286,6 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={curLocked}
-                  className={smallFieldBase}
                 />
               </div>
 
@@ -1355,7 +1298,6 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={curLocked}
-                  className={smallFieldBase}
                 />
               </div>
 
@@ -1386,7 +1328,6 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
-                        className={smallFieldBase}
                       />
                     </div>
 
@@ -1411,7 +1352,6 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
-                        className={smallFieldBase}
                       />
                     </div>
                   </>
@@ -1496,7 +1436,6 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={tgtLocked}
-                  className={smallFieldBase}
                 />
               </div>
 
@@ -1509,7 +1448,6 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={tgtLocked}
-                  className={smallFieldBase}
                 />
               </div>
 
@@ -1558,7 +1496,6 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
-                        className={smallFieldBase}
                       />
                     </div>
 
@@ -1585,7 +1522,6 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={bLevelDisabled}
-                        className={smallFieldBase}
                       />
                     </div>
 
