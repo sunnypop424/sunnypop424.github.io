@@ -112,7 +112,7 @@ export default function CoreOnly() {
             <Route path="/gem" element={<GemSimulator />} />
             <Route path="/optimizer" element={<LoACoreOptimizer />} />
             {/* 기본 경로 보정: /core → /core/optimizer */}
-            <Route path="*" element={<Navigate to="/optimizer" replace />} />
+            <Route path="*" element={<Navigate to="/gem" replace />} />
           </Routes>
         </main>
       </div>
