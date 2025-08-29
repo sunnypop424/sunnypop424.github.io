@@ -543,19 +543,101 @@ function ToastStack({ toasts, onClose }) {
   );
 }
 
-function NumberInput({ value, set, min = MIN_STAT, max = 99, disabled }) {
+function NumberInput({
+  value,
+  set,                 // (old) (number)=>void
+  onChange,            // (new) (number|null)=>void
+  min = MIN_STAT,
+  max = 99,
+  step = 1,
+  allowFloat = false,
+  zeroOnBlur = true,
+  className = "",
+  inputProps = {},
+  disabled,
+}) {
+  const toStr = (v) => (v === null || v === undefined ? "" : String(v));
+  const [inner, setInner] = React.useState(toStr(value));
+  React.useEffect(() => { setInner(toStr(value)); }, [value]);
+
+  const clampLocal = (n) => {
+    let x = n;
+    if (min != null && x < min) x = min;
+    if (max != null && x > max) x = max;
+    return x;
+  };
+
+  const normalizeOnBlur = (s) => {
+    if (s === "") return zeroOnBlur ? (min ?? 0) : null;
+    let n = Number(s);
+    if (!Number.isFinite(n)) return zeroOnBlur ? (min ?? 0) : null;
+    n = allowFloat ? n : Math.trunc(n);
+    return clampLocal(n);
+  };
+
+  // wheel 값 변동 방지(의도치 않은 증가/감소)
+  const handleWheel = (e) => e.currentTarget.blur();
+
+  // 구버전/신버전 핸들러 분기
+  const hasNewApi = typeof onChange === "function";
+  const callOld = typeof set === "function";
+
   return (
     <input
       type="number"
-      value={value}
+      inputMode={allowFloat ? "decimal" : "numeric"}
+      step={step}
       min={min}
       max={max}
       disabled={disabled}
-      onChange={(e) => set(clamp(parseInt(e.target.value || String(MIN_STAT), 10), min ?? MIN_STAT, max ?? 99))}
-      className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white"
+      value={inner}
+      onChange={(e) => {
+        const v = e.target.value;
+
+        // 입력 중 빈 문자열 허용
+        if (v === "") {
+          setInner("");
+          if (hasNewApi) onChange(null);
+          // 구버전(set)은 입력 중 null을 전달하지 않음 (기존 동작 유지)
+          return;
+        }
+
+        setInner(v);
+
+        const num = Number(v);
+        if (!Number.isFinite(num)) {
+          if (hasNewApi) onChange(null);
+          return;
+        }
+
+        const n = allowFloat ? num : Math.trunc(num);
+
+        if (hasNewApi) {
+          // 새 API: 입력 중에도 값 알림(클램프는 blur 시 확정)
+          onChange(n);
+        } else if (callOld) {
+          // 구 API: 즉시 클램프 + 업데이트 (기존 동작과 동일)
+          set(clampLocal(n));
+        }
+      }}
+      onBlur={() => {
+        const n = normalizeOnBlur(inner);
+        setInner(n == null ? "" : String(n));
+
+        if (hasNewApi) {
+          onChange(n);
+        } else if (callOld) {
+          // 구 API: null을 허용하지 않으므로 보정값(또는 min/0) 전달
+          set(n == null ? (min ?? 0) : n);
+        }
+      }}
+      onWheel={handleWheel}
+      className={`h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white ${className}`}
+      {...inputProps}
     />
   );
 }
+
 
 /* ===============================
    원래 Select API를 유지하면서 내부는 Dropdown 사용
