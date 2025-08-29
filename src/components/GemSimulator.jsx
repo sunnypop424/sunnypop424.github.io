@@ -494,7 +494,7 @@ function ToastStack({ toasts, onClose }) {
   }[tone] || "text-amber-900/80 hover:text-amber-900");
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none px-4">
+    <div className="fixed inset-0 z-[9999] flex space-y-2 flex-col items-center justify-center pointer-events-none px-4">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div
@@ -1598,26 +1598,30 @@ export default function GemSimulator() {
 
                 {/* 리소스 칩 */}
                 <div className="mt-3 flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
-                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                    남은 가공 횟수 <b className="ml-1">{manual.attemptsLeft}</b>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                    다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                    가공 비용 추가 비율 <b className="ml-1">{rateText}</b>
-                  </div>
-                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
+                  
+                  {manual.attemptsLeft <= 0 ? (
+                    <div className="inline-flex items-center px-2.5 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-[12px] lg:text-[13px]">
+                      가공이 완료되었습니다.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
+                      <div className="px-2.5 py-1.5 rounded-xl bg-gray-100 border">
+                        남은 가공 횟수 <b className="ml-1">{manual.attemptsLeft}</b>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-xl bg-gray-100 border">
+                        다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-xl bg-gray-100 border">
+                        가공 비용 추가 비율 <b className="ml-1">{rateText}</b>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100 border">
                     누적 골드 <b className="ml-1">{fmtNum(manual.gold)}</b> G
                   </div>
                 </div>
 
-                {/* 완료 배지 */}
-                {manual.attemptsLeft <= 0 && (
-                  <div className="mt-2 inline-flex items-center px-2.5 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-sm">
-                    가공이 완료되었습니다.
-                  </div>
-                )}
               </div>
 
               {/* 오른쪽: 선택지 + 액션 */}
