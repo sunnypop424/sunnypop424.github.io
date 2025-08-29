@@ -210,7 +210,7 @@ function applySlot(gemKey, pos, s, slot, costAddRate, rngFn) {
 
   let next = { ...s };
   const goldThisAttempt = GOLD_PER_ATTEMPT * (costAddRate === -1 ? 0 : costAddRate === 1 ? 2 : 1);
-  let nextRate = costAddRate;
+  let nextRate = 0;
   let rerollDelta = 0;
   const names = allowedEffectNames(gemKey, "상관 없음");
   switch (slot.kind) {
