@@ -38,3 +38,12 @@ body {
   animation: loaPulse .9s ease-in-out 3;
   transition: outline-color .2s, border-color .2s, box-shadow .2s;
 }
+
+/* ⬇️ 버튼 hover 시 부모 .slot-card에 LoA-highlight 스타일 적용 */
+.slot-card:has(.apply-btn:hover) {
+  position: relative;
+  outline: 2px solid #a399f2;
+  border-color: #a399f2 !important;
+  animation: loaPulse .9s ease-in-out infinite;
+  transition: outline-color .2s, border-color .2s, box-shadow .2s;
+}

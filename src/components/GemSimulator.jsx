@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useLayoutEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Edit3, Save, RotateCcw, RefreshCcw } from "lucide-react";
+import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp } from "lucide-react";
 import KakaoAdfit from "./KakaoAdfit";
+import './LoACoreOptimizer.css';
 
 /* =========================
    결정적 RNG 유틸리티 (원본 유지)
@@ -183,8 +184,8 @@ function slotToPrettyLabel(slot, s) {
     case "PTS": return `포인트 ${slot.delta > 0 ? "+" + slot.delta : "-1"}`;
     case "A_LVL": return `${s.aName} Lv. ${slot.delta > 0 ? "+" + slot.delta : "-1"}`;
     case "B_LVL": return `${s.bName} Lv. ${slot.delta > 0 ? "+" + slot.delta : "-1"}`;
-    case "A_CHANGE": return `${s.aName} 변경`;
-    case "B_CHANGE": return `${s.bName} 변경`;
+    case "A_CHANGE": return `${s.aName} 효과 변경`;
+    case "B_CHANGE": return `${s.bName} 효과 변경`;
     case "COST": return slot.mod === 1 ? "가공 비용 +100% 증가" : "가공 비용 -100% 감소";
     case "HOLD": return "가공 상태 유지";
     case "REROLL_PLUS": return `다른 항목 보기 ${slot.amount === 2 ? "+2회" : "+1회"}`;
@@ -249,8 +250,8 @@ function evaluateFromSimulation(
 ) {
   const {
     maxTrials = 50000,
-    epsilon   = 0.002,   // 목표 달성 확률의 95% CI 반폭(±0.2%p)
-    batch     = 1000,
+    epsilon = 0.002,   // 목표 달성 확률의 95% CI 반폭(±0.2%p)
+    batch = 1000,
   } = opts;
   const rand = makeRNG(seed);
   const weightedPickIndex = (arr) => {
@@ -273,17 +274,17 @@ function evaluateFromSimulation(
 
     // ✅ 이미 목표를 만족한 상태라면(달성 즉시 가공 완료 정책) 바로 성공 처리
     if (policy === "STOP_ON_SUCCESS" &&
-        meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) {
+      meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) {
       const score = totalScore(s);
       const g = gradeOf(score);
       return {
         successProb: 1,
         legendProb: g === "전설" ? 1 : 0,
-        relicProb:  g === "유물" ? 1 : 0,
-        ancientProb:g === "고대" ? 1 : 0,
+        relicProb: g === "유물" ? 1 : 0,
+        ancientProb: g === "고대" ? 1 : 0,
         expectedGold: 0, // 시도 안 했으니 비용 0
       };
-    }    
+    }
 
     while (left > 0) {
       let cand = [];
@@ -350,29 +351,29 @@ function evaluateFromSimulation(
     const until = Math.min(batch, maxTrials - n);
     for (let i = 0; i < until; i++) {
       const one = simOnce();
-      succSum   += one.successProb;   // 0 또는 1
+      succSum += one.successProb;   // 0 또는 1
       legendSum += one.legendProb;
-      relicSum  += one.relicProb;
-      ancientSum+= one.ancientProb;
-      goldSum   += one.expectedGold;
+      relicSum += one.relicProb;
+      ancientSum += one.ancientProb;
+      goldSum += one.expectedGold;
     }
     n += until;
 
     // 95% 신뢰구간 (정규 근사): p ± 1.96*sqrt(p(1-p)/n)
-    const p   = succSum / n;
-    const se  = Math.sqrt(Math.max(p*(1-p), 0) / Math.max(n, 1));
-    const hw  = 1.96 * se;
+    const p = succSum / n;
+    const se = Math.sqrt(Math.max(p * (1 - p), 0) / Math.max(n, 1));
+    const hw = 1.96 * se;
     agg.ci = { low: Math.max(0, p - hw), high: Math.min(1, p + hw), halfWidth: hw };
 
     if (hw <= epsilon) break; // 충분히 수렴하면 종료
   }
 
-  agg.trialsUsed  = n;
+  agg.trialsUsed = n;
   agg.successProb = succSum / n;
-  agg.legendProb  = legendSum / n;
-  agg.relicProb   = relicSum  / n;
-  agg.ancientProb = ancientSum/ n;
-  agg.expectedGold= goldSum   / n;
+  agg.legendProb = legendSum / n;
+  agg.relicProb = relicSum / n;
+  agg.ancientProb = ancientSum / n;
+  agg.expectedGold = goldSum / n;
   return agg;
 }
 
@@ -460,7 +461,7 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
         className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
       >
         <span className="truncate text-sm">{selected ? selected.label : placeholder || "선택"}</span>
-        <span className="text-gray-500 text-sm select-none">{open ? "▲" : "▼"}</span>
+        <span className="text-gray-500 text-sm select-none">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
       </button>
       {open && menu}
     </div>
@@ -630,8 +631,8 @@ export default function GemSimulator() {
       gold: 0,
     }));
   }, [rarity, cur]);
- 
- 
+
+
   const [changeMode, setChangeMode] = useState(null); // { who: 'A'|'B', options: string[] }
   const [changePick, setChangePick] = useState("");
 
@@ -724,7 +725,7 @@ export default function GemSimulator() {
         gemKeyIn, posIn, abForEval, nextManual.state, tgtIn, "RUN_TO_END",
         nextManual.attemptsLeft, nextManual.rerolls, nextManual.costAddRate, nextManual.unlocked, [],
         seed + hash32(lb), tgtNames
-      , { maxTrials: 8000, epsilon: 0.006, batch: 500 });
+        , { maxTrials: 8000, epsilon: 0.006, batch: 500 });
       acc += v.successProb; cnt += 1;
     }
     return cnt ? acc / cnt : 0;
@@ -853,7 +854,7 @@ export default function GemSimulator() {
       push("변경할 효과를 선택해 주세요. 왼쪽 패널에서 적용을 누르면 이번 차수에 반영됩니다.", "info");
       return; // ✅ 여기서 종료 (아직 시도/골드 소모하지 않음)
     }
-  
+
     const res = applySlot(gemKey, pos, manual.state, action, manual.costAddRate);
     const nextAttemptsLeft = manual.attemptsLeft - 1;
     setManual((m) => ({
@@ -900,7 +901,7 @@ export default function GemSimulator() {
     setChangeMode(null);
     push("선택한 효과로 변경되었습니다.", "success");
   }
- 
+
   function cancelEffectChange() {
     setChangeMode(null);
     push("효과 변경을 취소했습니다.", "warning");
@@ -918,6 +919,11 @@ export default function GemSimulator() {
   const rateText = manual.costAddRate === 1 ? "+100%" : manual.costAddRate === -1 ? "-100%" : "0%";
   const hasDup = hasDuplicateLabels(manLabels);
   const showEffectsUI = true;
+
+  const showSkeleton = useMemo(
+    () => curValid && (isComputing || !(resultRun && resultStop)),
+    [curValid, isComputing, resultRun, resultStop]
+  );
 
   const actionDisabled = hasDup || !!changeMode || manual.attemptsLeft <= 0;
   const rerollDisabled = !!changeMode || manual.attemptsLeft <= 0 || manual.rerolls <= 0;
@@ -1156,60 +1162,60 @@ export default function GemSimulator() {
 
         {/* 3) 목표 옵션 설정 — 입력 블록 교체(간격/폭 LoACore와 동일) */}
         <section className={card}>
-<div className="flex items-center gap-2">
-  <h2 className={sectionTitle}>목표 옵션 설정</h2>
+          <div className="flex items-center gap-2">
+            <h2 className={sectionTitle}>목표 옵션 설정</h2>
 
-  {/* ⬇️ 헤더 우측: '목표 충족 방식'을 저장/편집 버튼 왼쪽에 배치 */}
-  <div className="ml-auto flex items-center gap-3 flex-wrap">
-    <div className={`flex items-center gap-4 text-sm ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
-      <span className="text-xs text-gray-500">목표 충족 방식</span>
-      <label className="inline-flex items-center gap-2">
-        <input
-          type="radio"
-          checked={abModePrimary === "ANY_ONE"}
-          onChange={() => setAbModePrimary("ANY_ONE")}
-          disabled={tgtLocked || pos === "상관 없음"}
-          className="accent-primary"
-        />
-        1개 이상
-      </label>
-      <label className="inline-flex items-center gap-2">
-        <input
-          type="radio"
-          checked={abModePrimary === "BOTH"}
-          onChange={() => setAbModePrimary("BOTH")}
-          disabled={tgtLocked || pos === "상관 없음"}
-          className="accent-primary"
-        />
-        2개
-      </label>
-    </div>
+            {/* ⬇️ 헤더 우측: '목표 충족 방식'을 저장/편집 버튼 왼쪽에 배치 */}
+            <div className="ml-auto flex items-center gap-3 flex-wrap">
+              <div className={`flex items-center gap-4 text-sm ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+                <span className="text-xs text-gray-500">목표 충족 방식</span>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={abModePrimary === "ANY_ONE"}
+                    onChange={() => setAbModePrimary("ANY_ONE")}
+                    disabled={tgtLocked || pos === "상관 없음"}
+                    className="accent-primary"
+                  />
+                  1개 이상
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={abModePrimary === "BOTH"}
+                    onChange={() => setAbModePrimary("BOTH")}
+                    disabled={tgtLocked || pos === "상관 없음"}
+                    className="accent-primary"
+                  />
+                  2개
+                </label>
+              </div>
 
-    {/* 저장/편집 토글 버튼 (그대로) */}
-    {tgtLocked ? (
-      <>
-        <span className="text-xs text-gray-500 hidden sm:inline">저장됨 (계산 활성)</span>
-        <button
-          type="button"
-          onClick={() => setTgtLocked(false)}
-          className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
-        >
-          <Edit3 size={16} />
-          편집하기
-        </button>
-      </>
-    ) : (
-      <button
-        type="button"
-        onClick={() => setTgtLocked(true)}
-        className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
-      >
-        <Save size={16} />
-        저장하기
-      </button>
-    )}
-  </div>
-</div>
+              {/* 저장/편집 토글 버튼 (그대로) */}
+              {tgtLocked ? (
+                <>
+                  <span className="text-xs text-gray-500 hidden sm:inline">저장됨 (계산 활성)</span>
+                  <button
+                    type="button"
+                    onClick={() => setTgtLocked(false)}
+                    className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
+                  >
+                    <Edit3 size={16} />
+                    편집하기
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTgtLocked(true)}
+                  className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
+                >
+                  <Save size={16} />
+                  저장하기
+                </button>
+              )}
+            </div>
+          </div>
 
 
           {/* LoACore 코어행과 동일한 한 줄 카드 레이아웃 */}
@@ -1239,7 +1245,7 @@ export default function GemSimulator() {
                 />
               </div>
 
-              
+
               {/* 추가 효과 */}
               <div className="flex flex-col min-w-[100px] w-full lg:w-[100px]">
                 <label className={labelCls}>추가 효과</label>
@@ -1418,7 +1424,7 @@ export default function GemSimulator() {
                   남은 가공 횟수 <b className="ml-1">{manual.attemptsLeft}</b>
                 </div>
                 <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                  남은 다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
+                  다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
                 </div>
                 <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
                   가공 비용 추가 비율 <b className="ml-1">{rateText}</b>
@@ -1442,7 +1448,7 @@ export default function GemSimulator() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {manLabels.map((label, idx) => (
-                  <div key={idx} className="rounded-xl border p-2">
+                  <div key={idx} className="slot-card rounded-xl border p-2 transition-all">
                     <div className="text-xs text-gray-500 mb-1">슬롯 {idx + 1}</div>
                     <div className="flex items-center gap-2">
                       <Select
@@ -1454,24 +1460,25 @@ export default function GemSimulator() {
                         }}
                         options={allOptionLabels}
                       />
-                      <button 
-                        onClick={() => applyManual(idx)} 
+                      <button
+                        onClick={() => applyManual(idx)}
                         disabled={actionDisabled}
-                        className={`justify-center min-w-[60px] h-10 px-3 rounded-xl border bg-white hover:bg-gray-50 inline-flex items-center ${hasDup ? "opacity-50 cursor-not-allowed" : ""
+                        className={`apply-btn transition-all justify-center min-w-[60px] h-10 px-3 rounded-xl border bg-white hover:border-[#a399f2] hover:text-white hover:bg-[#a399f2] inline-flex items-center ${hasDup ? "opacity-50 cursor-not-allowed" : ""
                           }`}
                       >
-                        선택
+                        적용
                       </button>
                     </div>
                   </div>
                 ))}
+
               </div>
 
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <button onClick={doReroll} disabled={rerollDisabled}
                   className={`h-10 px-3 rounded-xl border ${rerollDisabled ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2`}>
                   <RefreshCcw size={16} />
-                  남은 다른 항목 보기 {manual.rerolls}회
+                  다른 항목 보기 {manual.rerolls}회
                 </button>
                 <span className="text-xs text-gray-600">
                   {manual.attemptsLeft <= 0
@@ -1491,184 +1498,199 @@ export default function GemSimulator() {
           </div>
         </section>
 
-
         {/* 5) 결과 출력 */}
         <section className={card}>
           <div className="flex items-center gap-2">
             <h2 className={sectionTitle}>결과 출력</h2>
             <div className="ml-auto flex items-center gap-2">
- <span className="px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs text-gray-600">
-   Monte Carlo {fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회
-   {resultRun?.ci?.halfWidth
-     ? ` (±${(resultRun.ci.halfWidth * 100).toFixed(2)}%p @95%)`
-     : ""}
- </span>
+              <span className="px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs text-gray-600">
+                Monte Carlo {fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회
+                {resultRun?.ci?.halfWidth
+                  ? ` (±${(resultRun.ci.halfWidth * 100).toFixed(2)}%p @95%)`
+                  : ""}
+              </span>
             </div>
           </div>
 
-          {/* 1회차 선택지 – 칩으로 보기 좋게 */}
-          <div className="mt-2 text-sm text-gray-700">
-            <div className="text-xs text-gray-500 mb-1">현재 계산에 반영되는 1회차 선택지</div>
-            <div className="flex flex-wrap gap-1.5">
-              {manLabels.map((l, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border bg-white text-[12px]"
-                >
-                  {l}
-                </span>
-              ))}
+          {/* ▷ 스켈레톤 전체 덮개: 계산 중/미준비 상태면 전체를 스켈레톤으로 */}
+          {showSkeleton ? (
+            <div className="mt-3 space-y-3">
+              {/* 칩 스켈레톤 */}
+              <div className="text-xs text-gray-500 mb-1">현재 계산에 반영되는 1회차 선택지</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[...Array(4)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-6 w-28 rounded-lg bg-gray-100 animate-pulse"
+                  />
+                ))}
+              </div>
+
+              {/* 카드 스켈레톤 (2장) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2">
+                {[0, 1].map((k) => (
+                  <div key={k} className="rounded-xl border p-3 bg-white">
+                    <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                    <div className="mt-3 h-8 w-2/3 bg-gray-100 rounded animate-pulse" />
+                    <div className="mt-2 h-2 w-full bg-gray-100 rounded animate-pulse" />
+                    <div className="mt-4 h-4 w-40 bg-gray-100 rounded animate-pulse" />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          {/* 로딩 스켈레톤 */}
-          {isComputing && (
-            <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {[0, 1].map((k) => (
-                <div key={k} className="rounded-xl border p-3 bg-white">
-                  <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
-                  <div className="mt-3 h-10 w-2/3 bg-gray-100 rounded animate-pulse" />
-                  <div className="mt-2 h-2 w-full bg-gray-100 rounded animate-pulse" />
-                  <div className="mt-4 h-4 w-40 bg-gray-100 rounded animate-pulse" />
+          ) : (
+            <>
+              {/* ▷ 실제 결과 UI: 스켈레톤이 아닐 때 한 번에 노출 */}
+              <div className="mt-2 text-sm text-gray-700">
+                <div className="text-xs text-gray-500 mb-1">현재 계산에 반영되는 1회차 선택지</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {manLabels.map((l, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border bg-white text-[12px]"
+                    >
+                      {l}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
 
-          {/* 결과 카드 */}
-          {resultRun && resultStop && !isComputing && (
-            <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {/* 목표 달성 확률 */}
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: .18 }}
-                className="rounded-xl border p-3 bg-white"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold flex items-center gap-2">
-                    목표 달성 확률
-                  </div>
-                  <span className="px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600">
-                    {calcMode === "IGNORE_AB"
-                      ? "추가 효과 상관 없음"
-                      : calcMode === "ANY_ONE"
-                        ? "추가 효과 역할군 옵션 1개 이상"
-                        : "추가 효과 역할군 옵션 2개 전부"}
-                  </span>
+              {resultRun && resultStop && (
+                <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {/* 목표 달성 확률 */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: .18 }}
+                    className="rounded-xl border p-3 bg-white"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold flex items-center gap-2">
+                        목표 달성 확률
+                      </div>
+                      <span className="px-2 py-1 rounded-lg bg-gray-50 text-[11px] text-gray-600">
+                        {calcMode === "IGNORE_AB"
+                          ? "추가 효과 상관 없음"
+                          : calcMode === "ANY_ONE"
+                            ? "추가 효과 역할군 옵션 1개 이상"
+                            : "추가 효과 역할군 옵션 2개 전부"}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* STOP_ON_SUCCESS */}
+                      <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-gray-500">달성 즉시 가공 완료</div>
+                        </div>
+                        <div className="mt-1 text-2xl font-bold">{fmtProb(resultStop.successProb)}</div>
+                        <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round(resultStop.successProb * 100)}%` }}
+                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
+                          />
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                          기대 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
+                        </div>
+                      </div>
+
+                      {/* RUN_TO_END */}
+                      <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-gray-500">가공 횟수 전부 소모</div>
+                        </div>
+                        <div className="mt-1 text-2xl font-bold">{fmtProb(resultRun.successProb)}</div>
+                        <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round(resultRun.successProb * 100)}%` }}
+                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
+                          />
+                        </div>
+                        <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
+                          기대 골드: <b>{fmtNum(Math.round(resultRun.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* 등급 확률 */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: .18, delay: .05 }}
+                    className="rounded-xl border p-3 bg-white"
+                  >
+                    <div className="text-sm font-semibold flex items-center gap-2">
+                      등급 확률
+                    </div>
+
+                    <div className="mt-3 space-y-3 text-sm">
+                      {/* 전설 */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-700">전설 (4~15)</span>
+                          <b>{fmtProb(resultRun.legendProb)}</b>
+                        </div>
+                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round(resultRun.legendProb * 100)}%` }}
+                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 유물 */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-700">유물 (16~18)</span>
+                          <b>{fmtProb(resultRun.relicProb)}</b>
+                        </div>
+                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round(resultRun.relicProb * 100)}%` }}
+                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 고대 */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-700">고대 (19+)</span>
+                          <b>{fmtProb(resultRun.ancientProb)}</b>
+                        </div>
+                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.round(resultRun.ancientProb * 100)}%` }}
+                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
                 </div>
-
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* STOP_ON_SUCCESS */}
-                  <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-gray-500">달성 즉시 가공 완료</div>
-                    </div>
-                    <div className="mt-1 text-2xl font-bold">{fmtProb(resultStop.successProb)}</div>
-                    {/* progress */}
-                    <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.round(resultStop.successProb * 100)}%` }}
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                        className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                      />
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                      기대 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
-                    </div>
-                  </div>
-
-                  {/* RUN_TO_END */}
-                  <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-gray-500">가공 횟수 전부 소모</div>
-                    </div>
-                    <div className="mt-1 text-2xl font-bold">{fmtProb(resultRun.successProb)}</div>
-                    <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.round(resultRun.successProb * 100)}%` }}
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                        className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                      />
-                    </div>
-                    <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                      기대 골드: <b>{fmtNum(Math.round(resultRun.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* 등급 확률 */}
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: .18, delay: .05 }}
-                className="rounded-xl border p-3 bg-white"
-              >
-                <div className="text-sm font-semibold flex items-center gap-2">
-                  등급 확률
-                </div>
-
-                <div className="mt-3 space-y-3 text-sm">
-                  {/* 전설 */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-700">전설 (4~15)</span>
-                      <b>{fmtProb(resultRun.legendProb)}</b>
-                    </div>
-                    <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.round(resultRun.legendProb * 100)}%` }}
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                        className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 유물 */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-700">유물 (16~18)</span>
-                      <b>{fmtProb(resultRun.relicProb)}</b>
-                    </div>
-                    <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.round(resultRun.relicProb * 100)}%` }}
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                        className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 고대 */}
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-700">고대 (19+)</span>
-                      <b>{fmtProb(resultRun.ancientProb)}</b>
-                    </div>
-                    <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.round(resultRun.ancientProb * 100)}%` }}
-                        transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                        className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+              )}
+            </>
           )}
         </section>
+
+
 
       </div>
 
       <ToastStack toasts={toasts} onClose={remove} />
-      
+
 
       <div className="mt-6">
         <KakaoAdfit />
