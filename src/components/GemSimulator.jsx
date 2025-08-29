@@ -1125,7 +1125,7 @@ export default function GemSimulator() {
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left">로아 아크그리드 젬 가공 확률 계산기</h1>
+            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">로아 아크그리드 젬 가공 확률 계산기</h1>
           </div>
         </section>
 
