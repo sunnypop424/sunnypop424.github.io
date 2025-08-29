@@ -1064,7 +1064,7 @@ export default function GemSimulator() {
   }
 
   /* ====== UI 토큰 ====== */
-  useEffect(() => { document.title = "로스트아크 젬 가공 헬퍼"; }, []);
+  useEffect(() => { document.title = "로아 아크그리드 젬 가공 헬퍼"; }, []);
   const card = "bg-white rounded-2xl shadow-sm p-4 lg:p-6";
   const labelCls = "block text-xs text-gray-500 mb-1";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
@@ -1125,7 +1125,7 @@ export default function GemSimulator() {
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow">로스트아크 젬 가공 확률 계산기</h1>
+            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow">로아 아크그리드 젬 가공 확률 계산기</h1>
           </div>
         </section>
 
