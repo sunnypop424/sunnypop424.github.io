@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useLayoutEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp } from "lucide-react";
+import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp, Undo2, Redo2 } from "lucide-react";
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
 
@@ -56,6 +56,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtProb = (p) => ((Math.max(0, Math.min(1, isNaN(p) ? 0 : p)) * 100).toFixed(5) + "%");
 const fmtNum = (n) => n.toLocaleString();
 const OFFICIAL_RNG = true;
+
 
 /* =========================
    효과명/포지션/스코어/목표 (원본 유지)
@@ -324,7 +325,7 @@ function evaluateFromSimulation(
             best = { next: res.next, gold: res.goldThisAttempt, nextRate: res.nextRate, rrd: res.rerollDelta, gain };
           }
         }
-        // 탐욕 리롤 휴리스틱(원래 로직)
+        // 탐욕 다른 항목 보기 휴리스틱(원래 로직)
         if (best && best.gain <= 0 && unlocked && rrs > 0) { rrs -= 1; first = false; continue; }
         if (best) { s = best.next; goldSum += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
       }
@@ -548,7 +549,7 @@ const Select = ({ value, set, options, disabled, placeholder }) => {
       onChange={set}
       items={items}
       disabled={!!disabled}
-      className="w-full lg:w-44"
+      className="w-full lg:w-full"
       placeholder={placeholder || "선택"}
     />
   );
@@ -636,6 +637,116 @@ export default function GemSimulator() {
   const [changeMode, setChangeMode] = useState(null); // { who: 'A'|'B', options: string[] }
   const [changePick, setChangePick] = useState("");
 
+  // ==== Undo/Redo 히스토리 ====
+  const HISTORY_LIMIT = 50;
+  const [history, setHistory] = useState({ past: [], future: [] });
+
+  // manual, changeMode, changePick 을 하나의 스냅샷으로 관리
+  const takeSnapshot = useCallback(() => ({
+    manual: JSON.parse(JSON.stringify(manual)),
+    changeMode: changeMode ? { ...changeMode, options: [...changeMode.options] } : null,
+    changePick
+  }), [manual, changeMode, changePick]);
+
+  const restoreSnapshot = useCallback((snap) => {
+    setManual(snap.manual);
+    setChangeMode(snap.changeMode);
+    setChangePick(snap.changePick);
+  }, []);
+
+  const pushHistory = useCallback(() => {
+    setHistory(h => {
+      const nextPast = [...h.past, takeSnapshot()];
+      // 용량 제한
+      while (nextPast.length > HISTORY_LIMIT) nextPast.shift();
+      return { past: nextPast, future: [] };
+    });
+  }, [takeSnapshot]);
+
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
+
+
+  // ==== 작업 내역(Log) ====
+  const LOG_LIMIT = 200;
+  const [logs, setLogs] = useState([]); // 최신이 위로 오게 저장
+
+  const nowStr = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+
+  const addLog = useCallback((entry) => {
+    // entry: { type, title, detail?, meta? }
+    setLogs((prev) => [
+      { id: Math.random().toString(36).slice(2), time: nowStr(), ...entry },
+      ...prev
+    ].slice(0, LOG_LIMIT));
+  }, []);
+
+
+
+  const undo = useCallback(() => {
+    setHistory(h => {
+      if (h.past.length === 0) return h;
+      const prev = h.past[h.past.length - 1];
+      const newPast = h.past.slice(0, -1);
+      const current = takeSnapshot();
+      // 상태 복원
+      restoreSnapshot(prev);
+      addLog({ type: 'undo', title: '되돌리기', detail: '이전 상태로 복구' });
+      return { past: newPast, future: [current, ...h.future] };
+    });
+  }, [restoreSnapshot, takeSnapshot, addLog]);
+
+  const redo = useCallback(() => {
+    setHistory(h => {
+      if (h.future.length === 0) return h;
+      const next = h.future[0];
+      const restFuture = h.future.slice(1);
+      const current = takeSnapshot();
+      // 상태 복원
+      restoreSnapshot(next);
+      addLog({ type: 'redo', title: '다시하기', detail: '되돌리기 취소' });
+      return { past: [...h.past, current], future: restFuture };
+    });
+  }, [restoreSnapshot, takeSnapshot, addLog]);
+
+  // ⌨️ 단축키: Ctrl/Cmd+Z = Undo, Ctrl/Cmd+Shift+Z = Redo
+  useEffect(() => {
+    const onKey = (e) => {
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+      if (e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) { if (canRedo) redo(); }
+        else { if (canUndo) undo(); }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [canUndo, canRedo, undo, redo]);
+
+
+  // 상태 비교해서 읽기 쉬운 diff 문자열 만들어주기
+  const diffStats = (before, after) => {
+    const parts = [];
+    const pushIf = (k, label = k) => {
+      if (before[k] !== after[k]) parts.push(`${label} ${before[k]}→${after[k]}`);
+    };
+    pushIf('eff', '효율');
+    pushIf('pts', '포인트');
+    if (before.aName !== after.aName || before.aLvl !== after.aLvl) {
+      const name = before.aName === after.aName ? after.aName : `${before.aName}→${after.aName}`;
+      parts.push(`A ${name} Lv.${before.aLvl}→${after.aLvl}`);
+    }
+    if (before.bName !== after.bName || before.bLvl !== after.bLvl) {
+      const name = before.bName === after.bName ? after.bName : `${before.bName}→${after.bName}`;
+      parts.push(`B ${name} Lv.${before.bLvl}→${after.bLvl}`);
+    }
+    return parts.join(' · ');
+  };
 
 
   // 포지션/젬타입 바뀔 때 목표 이름을 유효풀로 보정
@@ -694,7 +805,22 @@ export default function GemSimulator() {
   const tokenRef = useRef(0);
   const timerRef = useRef(null);
 
-  /* 리롤 EV (원본 유지) */
+  // 높이 동기화 refs & 상태
+  const simRef = useRef(null);       // 왼쪽(가공 시뮬레이션) 카드
+  const [logsMax, setLogsMax] = useState(null); // 오른쪽 카드 max-height(px)
+  useLayoutEffect(() => {
+    const recalc = () => {
+      if (simRef.current) {
+        setLogsMax(simRef.current.offsetHeight);
+      }
+    };
+    recalc();
+    window.addEventListener('resize', recalc);
+    return () => window.removeEventListener('resize', recalc);
+    // 왼쪽 카드 높이에 영향을 주는 값들이 갱신되면 다시 계산
+  }, [manual, manLabels, resultRun, resultStop, changeMode, tgtLocked, basicLocked, curLocked]);
+
+  /* 다른 항목 보기 EV (원본 유지) */
   const REROLL_SAMPLES = 16;
   const TAU = 0.0025;
   const expectedSuccessProbForLabels = useCallback((labels, gemKeyIn, posIn, abForEval, manualIn, tgtIn, seed) => {
@@ -748,9 +874,9 @@ export default function GemSimulator() {
   function slotsToLabels(slots, s) { return slots.map((sl) => slotToPrettyLabel(sl, s)); }
 
   const rerollAdvice = useMemo(() => {
-    if (!manual.unlocked) return { shouldReroll: false, reason: "첫 가공 이전에는 리롤 추천을 하지 않습니다." };
-    if (manual.rerolls <= 0) return { shouldReroll: false, reason: "리롤이 없습니다." };
-    if (manual.attemptsLeft <= 0) return { shouldReroll: false, reason: "가공이 완료되어 리롤 판단이 무의미합니다." };
+    if (!manual.unlocked) return { shouldReroll: false, reason: "첫 가공 이전에는 다른 항목 보기를 추천을 하지 않습니다." };
+    if (manual.rerolls <= 0) return { shouldReroll: false, reason: "다른 항목 보기가 없습니다." };
+    if (manual.attemptsLeft <= 0) return { shouldReroll: false, reason: "가공이 완료되어 다른 항목 보기 판단이 무의미합니다." };
 
     const abForEval = pos === "상관 없음" ? "ANY_ONE" : abModePrimary;
     const seedBase = makeDeterministicSeed({ gemKey, pos, rarity, manual, tgt, manLabels, abForEval, salt: "REROLL_EV" });
@@ -771,11 +897,11 @@ export default function GemSimulator() {
     const pct = (x) => (x * 100).toFixed(2) + "%";
 
     if (delta > TAU) {
-      return { shouldReroll: true, reason: `룩어헤드 기준 리롤 추천: 현재 최선 ${pct(nowProb)} → 리롤 기대 ${pct(rerollProb)} (▲${pct(delta)}).` };
+      return { shouldReroll: true, reason: `룩어헤드 기준 다른 항목 보기 추천: 현재 최선 ${pct(nowProb)} → 다른 항목 보기 기대 ${pct(rerollProb)} (▲${pct(delta)}).` };
     } else if (delta < -TAU) {
-      return { shouldReroll: false, reason: `룩어헤드 기준 리롤 비추천: 현재 최선 ${pct(nowProb)}가 리롤 기대 ${pct(rerollProb)}보다 유리 (▼${pct(-delta)}).` };
+      return { shouldReroll: false, reason: `룩어헤드 기준 다른 항목 보기 비추천: 현재 최선 ${pct(nowProb)}가 다른 항목 보기 기대 ${pct(rerollProb)}보다 유리 (▼${pct(-delta)}).` };
     } else {
-      return { shouldReroll: false, reason: `두 경로 차이 미미: 현재 ${pct(nowProb)} vs 리롤 ${pct(rerollProb)} (|Δ| < ${(TAU * 100).toFixed(2)}%).` };
+      return { shouldReroll: false, reason: `두 경로 차이 미미: 현재 ${pct(nowProb)} vs 다른 항목 보기 ${pct(rerollProb)} (|Δ| < ${(TAU * 100).toFixed(2)}%).` };
     }
   }, [gemKey, pos, rarity, manual, tgt, manLabels, abModePrimary, expectedSuccessProbForLabels]);
 
@@ -813,12 +939,12 @@ export default function GemSimulator() {
       const stop = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "STOP_ON_SUCCESS",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames
-        , { maxTrials: 120000, epsilon: 0.002, batch: 1000 }
+        , { maxTrials: 50000, epsilon: 0.002, batch: 1000 }
       );
       const run = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "RUN_TO_END",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 103, tgtNames
-        , { maxTrials: 120000, epsilon: 0.002, batch: 1000 }
+        , { maxTrials: 50000, epsilon: 0.002, batch: 1000 }
       );
       if (token === tokenRef.current) { setResultStop(stop); setResultRun(run); setIsComputing(false); }
     }, 0);
@@ -836,6 +962,8 @@ export default function GemSimulator() {
 
   /* 사용자 액션: 토스트로 안내 */
   function applyManual(slotIdx) {
+    if (!allLocked) { push("항목을 적용하려면 '기본 설정/현재 옵션/목표 옵션'을 모두 저장(잠금)하세요.", "warning"); return; }
+    pushHistory();
     if (!tgtLocked) { push("목표 옵션을 먼저 저장해 주세요."); return; }
     if (manual.attemptsLeft <= 0) return;
     if (hasDuplicateLabels(manLabels)) { push("중복된 항목이 있습니다. 확인해주세요."); return; }
@@ -854,7 +982,11 @@ export default function GemSimulator() {
       push("변경할 효과를 선택해 주세요. 왼쪽 패널에서 적용을 누르면 이번 차수에 반영됩니다.", "info");
       return; // ✅ 여기서 종료 (아직 시도/골드 소모하지 않음)
     }
-
+    if (manual.attemptsLeft <= 0) {
+      push("가공이 완료되어 더 이상 적용할 수 없어요.", "warning");
+      return;
+    }
+    const before = { ...manual.state };
     const res = applySlot(gemKey, pos, manual.state, action, manual.costAddRate);
     const nextAttemptsLeft = manual.attemptsLeft - 1;
     setManual((m) => ({
@@ -865,26 +997,43 @@ export default function GemSimulator() {
       gold: m.gold + res.goldThisAttempt,
       state: res.next,
     }));
-    // 다음 라운드가 남아있을 때만 안내 토스트 표시
+    addLog({
+      type: 'apply',
+      title: `슬롯 ${slotIdx + 1} 적용: ${label}`,
+      detail: diffStats(before, res.next),
+      meta: { cost: res.goldThisAttempt, attemptsLeft: nextAttemptsLeft, rerollDelta: res.rerollDelta }
+    });
     if (nextAttemptsLeft > 0) {
       push("선택한 효과가 반영되었습니다. 업데이트된 4개의 선택지를 다시 설정해주세요.", "success");
     }
   }
   function doReroll() {
-    if (manual.attemptsLeft <= 0) { push("가공이 완료되어 리롤을 사용할 수 없어요."); return; }
-    if (!manual.unlocked) { push("가공 1회 이후부터 리롤을 사용할 수 있어요."); return; }
-    if (manual.rerolls <= 0) { push("리롤 횟수가 부족해요."); return; }
+    if (!allLocked) { push("다른 항목 보기는 모든 설정이 잠금된 상태에서만 가능합니다.", "warning"); return; }
+    if (manual.attemptsLeft <= 0) { push("가공이 완료되어 다른 항목 보기를 사용할 수 없어요."); return; }
+    if (!manual.unlocked) { push("가공 1회 이후부터 다른 항목 보기를 사용할 수 있어요."); return; }
+    if (manual.rerolls <= 0) { push("다른 항목 보기 횟수가 부족해요."); return; }
+    pushHistory(); // 변경 전 스냅샷 저장
     setManual((m) => ({ ...m, rerolls: m.rerolls - 1 }));
+    addLog({
+      type: 'reroll',
+      title: '다른 항목 보기 사용',
+      detail: `남은 다른 항목 보기 ${manual.rerolls - 1}회`,
+    });
   }
   function manualReset() {
+    setLogs([]);   // 작업 내역 삭제
+    setHistory({ past: [], future: [] }); // 히스토리도 같이 초기화하면 깔끔
     setManual({ attemptsLeft: RARITY_ATTEMPTS[rarity], rerolls: RARITY_BASE_REROLLS[rarity], unlocked: false, costAddRate: 0, gold: 0, state: { ...cur } });
   }
 
 
   function confirmEffectChange() {
     if (!changeMode) return;
+    if (!allLocked) { push("효과 변경 확정은 모든 설정이 잠금된 상태에서만 가능합니다.", "warning"); return; }
+    pushHistory(); // 변경 전 스냅샷 저장
     const goldThisAttempt =
       GOLD_PER_ATTEMPT * (manual.costAddRate === -1 ? 0 : manual.costAddRate === 1 ? 2 : 1);
+    const before = { ...manual.state };
     setManual((m) => {
       const next = { ...m.state };
       if (changeMode.who === "A") next.aName = changePick;
@@ -897,6 +1046,13 @@ export default function GemSimulator() {
         gold: m.gold + goldThisAttempt,
         state: next,
       };
+    });
+    const after = { ...manual.state, ...(changeMode.who === "A" ? { aName: changePick } : { bName: changePick }) };
+    addLog({
+      type: 'change',
+      title: `효과 변경 확정 (${changeMode.who}) → ${changePick}`,
+      detail: diffStats(before, after),
+      meta: { cost: goldThisAttempt }
     });
     setChangeMode(null);
     push("선택한 효과로 변경되었습니다.", "success");
@@ -917,6 +1073,7 @@ export default function GemSimulator() {
   const tgtALabel = `목표 효과 A 레벨 ≥`;
   const tgtBLabel = `목표 효과 B 레벨 ≥`;
   const rateText = manual.costAddRate === 1 ? "+100%" : manual.costAddRate === -1 ? "-100%" : "0%";
+  const allLocked = basicLocked && curLocked && tgtLocked;
   const hasDup = hasDuplicateLabels(manLabels);
   const showEffectsUI = true;
 
@@ -925,11 +1082,20 @@ export default function GemSimulator() {
     [curValid, isComputing, resultRun, resultStop]
   );
 
-  const actionDisabled = hasDup || !!changeMode || manual.attemptsLeft <= 0;
-  const rerollDisabled = !!changeMode || manual.attemptsLeft <= 0 || manual.rerolls <= 0;
+  const actionDisabled = !allLocked || hasDup || !!changeMode || manual.attemptsLeft <= 0;
+  const rerollDisabled = !allLocked || !!changeMode || manual.attemptsLeft <= 0 || manual.rerolls <= 0;
 
 
   const dupWarnShown = useRef(false);
+
+  // allLocked이 false로 변하면 logs 초기화
+  useEffect(() => {
+    if (!allLocked) {
+      setLogs([]);   // 작업 내역 삭제
+      setHistory({ past: [], future: [] }); // 히스토리도 같이 초기화하면 깔끔
+    }
+  }, [allLocked]);
+
   useEffect(() => {
     if (hasDup) {
       if (!dupWarnShown.current) {
@@ -1025,12 +1191,12 @@ export default function GemSimulator() {
                 />
               </div>
 
-              {/* 가공/리롤 정보 */}
+              {/* 가공/다른 항목 보기 정보 */}
               <div className="flex flex-col w-full lg:w-auto">
-                <label className={labelCls}>기본 시도/리롤</label>
+                <label className={labelCls}>기본 시도/다른 항목 보기</label>
                 <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center text-sm">
-                  가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 기본 리롤{" "}
-                  <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>
+                  가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 다른 항목 보기{" "}
+                  <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>회
                 </div>
               </div>
             </div>
@@ -1167,29 +1333,7 @@ export default function GemSimulator() {
 
             {/* ⬇️ 헤더 우측: '목표 충족 방식'을 저장/편집 버튼 왼쪽에 배치 */}
             <div className="ml-auto flex items-center gap-3 flex-wrap">
-              <div className={`flex items-center gap-4 text-sm ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
-                <span className="text-xs text-gray-500">목표 충족 방식</span>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={abModePrimary === "ANY_ONE"}
-                    onChange={() => setAbModePrimary("ANY_ONE")}
-                    disabled={tgtLocked || pos === "상관 없음"}
-                    className="accent-primary"
-                  />
-                  1개 이상
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input
-                    type="radio"
-                    checked={abModePrimary === "BOTH"}
-                    onChange={() => setAbModePrimary("BOTH")}
-                    disabled={tgtLocked || pos === "상관 없음"}
-                    className="accent-primary"
-                  />
-                  2개
-                </label>
-              </div>
+
 
               {/* 저장/편집 토글 버튼 (그대로) */}
               {tgtLocked ? (
@@ -1217,6 +1361,30 @@ export default function GemSimulator() {
             </div>
           </div>
 
+
+          <div className={`mb-1 flex items-center gap-4 text-sm ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+            <span className="text-xs text-gray-500">목표 충족 방식</span>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                checked={abModePrimary === "ANY_ONE"}
+                onChange={() => setAbModePrimary("ANY_ONE")}
+                disabled={tgtLocked || pos === "상관 없음"}
+                className="accent-primary"
+              />
+              1개 이상
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="radio"
+                checked={abModePrimary === "BOTH"}
+                onChange={() => setAbModePrimary("BOTH")}
+                disabled={tgtLocked || pos === "상관 없음"}
+                className="accent-primary"
+              />
+              2개
+            </label>
+          </div>
 
           {/* LoACore 코어행과 동일한 한 줄 카드 레이아웃 */}
           <div className="mt-3">
@@ -1269,12 +1437,14 @@ export default function GemSimulator() {
                   <>
 
                     {/* 목표 이름 A */}
-                    <div className={`flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+                    <div className={`w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 A</label>
                       <Select
                         value={tgtNames.aName}
-                        set={(v) => setTgtNames((t) => ({ ...t, aName: v === t.bName ? t.aName : v }))}
-                        options={targetPool}
+                        set={(v) => setTgtNames((t) => ({ ...t, aName: v }))}  // ✅ setter는 무조건 반영
+                        options={abModePrimary === "BOTH"
+                          ? targetPool.filter((n) => n !== tgtNames.bName)      // ✅ BOTH일 때만 B와 중복 제거
+                          : targetPool}
                         disabled={tgtLocked || pos === "상관 없음"}
                       />
                     </div>
@@ -1292,12 +1462,14 @@ export default function GemSimulator() {
                     </div>
 
                     {/* 목표 이름 B (BOTH일 때만 활성) */}
-                    <div className={`flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
+                    <div className={`w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 B</label>
                       <Select
                         value={tgtNames.bName}
-                        set={(v) => setTgtNames((t) => v === t.aName ? t : ({ ...t, bName: v }))}
-                        options={targetPool.filter(n => n !== tgtNames.aName)}
+                        set={(v) => setTgtNames((t) => ({ ...t, bName: v }))}  // ✅ setter는 무조건 반영
+                        options={abModePrimary === "BOTH"
+                          ? targetPool.filter((n) => n !== tgtNames.aName)      // ✅ A와 중복만 제거
+                          : targetPool}
                         disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
                       />
                     </div>
@@ -1323,58 +1495,62 @@ export default function GemSimulator() {
         </section>
 
 
-
-        {/* 4) 가공 시뮬레이션 */}
-        <section className={card}>
-          {/* 타이틀 + 우측 액션 */}
-          <div className="flex items-center gap-2">
-            <h2 className={sectionTitle}>가공 시뮬레이션</h2>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={manualReset}
-                className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
-              >
-                <RotateCcw size={16} />
-                시뮬레이션 초기화
-              </button>
+        <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 4) 가공 시뮬레이션 */}
+          <section ref={simRef} className={`col-span-2 ` + card}>
+            {/* 타이틀 + 우측 액션 */}
+            <div className="flex items-center gap-2">
+              <h2 className={sectionTitle}>가공 시뮬레이션</h2>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={manualReset}
+                  className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2 text-sm"
+                >
+                  <RotateCcw size={16} />
+                  시뮬레이션 초기화
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* 왼쪽: 상태/리소스(가독성 업) */}
-            <div className="rounded-xl border p-3 bg-white">
-              <div className="text-sm font-semibold mb-2">현재 젬 상태</div>
+            {/* 🔹 안내문 추가 */}
+            <div className="mt-1 text-xs text-gray-500">
+              항목 적용 / 다른 항목 보기는 <b>모든 설정을 저장(잠금)</b>한 뒤 이용하세요.
+            </div>
 
-              {/* 작은 스탯 카드 4그리드 */}
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="rounded-xl border p-2">
-                  <div className="text-xs text-gray-500">의지력 효율</div>
-                  <div className="text-lg font-semibold">{manual.state.eff}</div>
-                </div>
-                <div className="rounded-xl border p-2">
-                  <div className="text-xs text-gray-500">질서·혼돈 포인트</div>
-                  <div className="text-lg font-semibold">{manual.state.pts}</div>
-                </div>
+            <div className="mt-3 gap-4">
+              {/* 왼쪽: 상태/리소스(가독성 업) */}
+              <div className="rounded-xl border p-3 bg-white">
+                <div className="text-sm font-semibold mb-2">현재 젬 상태</div>
 
-                {showEffectsUI && (
-                  <>
-                    <div className="rounded-xl border p-2">
+                {/* 작은 스탯 카드 4그리드 */}
+                <div className="grid grid-cols-4 gap-2 text-sm">
+                  <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
+                    <div className="text-xs text-gray-500">의지력 효율</div>
+                    <div className="text-lg font-semibold">{manual.state.eff}</div>
+                  </div>
+                  <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
+                    <div className="text-xs text-gray-500">질서·혼돈 포인트</div>
+                    <div className="text-lg font-semibold">{manual.state.pts}</div>
+                  </div>
+
+                  {showEffectsUI && (
+                    <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
                       {changeMode?.who === "A" ? (
                         <>
-                          <div className="mt-1">
+                          <div className="w-full">
                             <Select
                               value={changePick}
                               set={setChangePick}
                               options={changeMode.options}
                             />
                           </div>
-                          <div className="mt-2 flex gap-2">
+                          <div className="mt-2 flex gap-2 w-full">
                             <button onClick={confirmEffectChange}
-                              className="h-9 px-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
+                              className="h-9 px-3 rounded-xl bg-[#a399f2] text-white hover:bg-[#a399f2] w-[50%]">
                               적용
                             </button>
                             <button onClick={cancelEffectChange}
-                              className="h-9 px-3 rounded-xl border bg-white hover:bg-gray-50">
+                              className="h-9 px-3 rounded-xl border bg-white hover:bg-gray-50 w-[50%]">
                               취소
                             </button>
                           </div>
@@ -1386,23 +1562,26 @@ export default function GemSimulator() {
                         </>
                       )}
                     </div>
-                    <div className="rounded-xl border p-2">
+                  )}
+
+                  {showEffectsUI && (
+                    <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
                       {changeMode?.who === "B" ? (
                         <>
-                          <div className="mt-1">
+                          <div className="w-full">
                             <Select
                               value={changePick}
                               set={setChangePick}
                               options={changeMode.options}
                             />
                           </div>
-                          <div className="mt-2 flex gap-2">
+                          <div className="mt-2 flex gap-2 w-full">
                             <button onClick={confirmEffectChange}
-                              className="h-9 px-3 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">
+                              className="h-9 px-3 rounded-xl bg-[#a399f2] text-white hover:bg-[#a399f2] w-[50%]">
                               적용
                             </button>
                             <button onClick={cancelEffectChange}
-                              className="h-9 px-3 rounded-xl border bg-white hover:bg-gray-50">
+                              className="h-9 px-3 rounded-xl border bg-white hover:bg-gray-50 w-[50%]">
                               취소
                             </button>
                           </div>
@@ -1414,89 +1593,160 @@ export default function GemSimulator() {
                         </>
                       )}
                     </div>
-                  </>
+                  )}
+                </div>
+
+                {/* 리소스 칩 */}
+                <div className="mt-3 flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
+                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
+                    남은 가공 횟수 <b className="ml-1">{manual.attemptsLeft}</b>
+                  </div>
+                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
+                    다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
+                  </div>
+                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
+                    가공 비용 추가 비율 <b className="ml-1">{rateText}</b>
+                  </div>
+                  <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
+                    누적 골드 <b className="ml-1">{fmtNum(manual.gold)}</b> G
+                  </div>
+                </div>
+
+                {/* 완료 배지 */}
+                {manual.attemptsLeft <= 0 && (
+                  <div className="mt-2 inline-flex items-center px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+                    가공이 완료되었습니다.
+                  </div>
                 )}
               </div>
 
-              {/* 리소스 칩 */}
-              <div className="mt-3 flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
-                <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                  남은 가공 횟수 <b className="ml-1">{manual.attemptsLeft}</b>
-                </div>
-                <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                  다른 항목 보기 <b className="ml-1">{manual.rerolls}</b>
-                </div>
-                <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                  가공 비용 추가 비율 <b className="ml-1">{rateText}</b>
-                </div>
-                <div className="px-2.5 py-1.5 rounded-xl bg-gray-100">
-                  누적 골드 <b className="ml-1">{fmtNum(manual.gold)}</b> G
-                </div>
-              </div>
+              {/* 오른쪽: 선택지 + 액션 */}
+              <div className="rounded-xl border p-3 bg-white mt-4">
+                <div className="text-sm font-semibold mb-2">이번에 등장한 4개 항목</div>
 
-              {/* 완료 배지 */}
-              {manual.attemptsLeft <= 0 && (
-                <div className="mt-2 inline-flex items-center px-2.5 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
-                  가공이 완료되었습니다.
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {manLabels.map((label, idx) => (
+                    <div key={idx} className="slot-card rounded-xl border p-2 transition-all">
+                      <div className="text-xs text-gray-500 mb-1">슬롯 {idx + 1}</div>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={label}
+                          set={(v) => {
+                            const ns = [...manLabels];
+                            ns[idx] = v;
+                            setManLabels(ns);
+                          }}
+                          options={allOptionLabels}
+                        />
+                        <button
+                          onClick={() => applyManual(idx)}
+                          aria-disabled={actionDisabled}
+                          className={`apply-btn transition-all justify-center min-w-[60px] h-10 px-3 rounded-xl border bg-white 
+                          hover:border-[#a399f2] hover:text-white hover:bg-[#a399f2] inline-flex items-center
+                          ${actionDisabled ? "opacity-50 cursor-not-allowed" : ""} 
+                          ${hasDup ? "opacity-50 cursor-not-allowed" : ""}`}
+                        >
+                          적용
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
                 </div>
-              )}
+
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
+                  <button onClick={doReroll} disabled={rerollDisabled}
+                    className={`h-10 px-3 rounded-xl border ${rerollDisabled ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2`}>
+                    <RefreshCcw size={16} />
+                    다른 항목 보기 {manual.rerolls}회
+                  </button>
+                  <span className="text-xs text-gray-600">
+                    {manual.attemptsLeft <= 0
+                      ? "가공 완료"
+                      : !manual.unlocked
+                        ? "첫 가공 이후 가능합니다."
+                        : manual.rerolls <= 0
+                          ? "다른 항목 보기 없음"
+                          : (rerollAdvice.shouldReroll ? "다른 항목 보기 추천" : "다른 항목 보기 비추천")}
+                  </span>
+                </div>
+
+                {manual.unlocked && manual.rerolls > 0 && (
+                  <div className="mt-2 text-xs text-gray-700">{rerollAdvice.reason}</div>
+                )}
+              </div>
+            </div>
+          </section>
+
+
+          {/* 6) 작업 내역 */}
+          <section
+            className={`${card} h-full flex flex-col`}
+            style={logsMax ? { maxHeight: logsMax } : undefined}
+          >
+            <div className="flex items-center gap-2">
+              <h2 className={sectionTitle}>작업 내역</h2>
+              <div className="ml-auto flex items-center gap-2">
+
+                <button
+                  onClick={undo}
+                  disabled={!canUndo}
+                  className={`ml-auto h-10 px-3 rounded-xl border ${!canUndo ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2 text-sm`}
+                  title="되돌리기 (Ctrl/Cmd+Z)"
+                >
+                  <Undo2 size={16} />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo}
+                  className={`h-10 px-3 rounded-xl border ${!canRedo ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2 text-sm`}
+                  title="다시하기 (Ctrl/Cmd+Shift+Z)"
+                >
+                  <Redo2 size={16} />
+                </button>
+              </div>
             </div>
 
-            {/* 오른쪽: 선택지 + 액션 */}
-            <div className="rounded-xl border p-3 bg-white">
-              <div className="text-sm font-semibold mb-2">이번에 등장한 4개 항목</div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {manLabels.map((label, idx) => (
-                  <div key={idx} className="slot-card rounded-xl border p-2 transition-all">
-                    <div className="text-xs text-gray-500 mb-1">슬롯 {idx + 1}</div>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={label}
-                        set={(v) => {
-                          const ns = [...manLabels];
-                          ns[idx] = v;
-                          setManLabels(ns);
-                        }}
-                        options={allOptionLabels}
-                      />
-                      <button
-                        onClick={() => applyManual(idx)}
-                        disabled={actionDisabled}
-                        className={`apply-btn transition-all justify-center min-w-[60px] h-10 px-3 rounded-xl border bg-white hover:border-[#a399f2] hover:text-white hover:bg-[#a399f2] inline-flex items-center ${hasDup ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
-                      >
-                        적용
-                      </button>
+            {logs.length === 0 ? (
+              <div className="mt-3 text-sm text-gray-500">기록이 없습니다.</div>
+            ) : (
+              <div className="mt-3 flex-1 min-h-0 space-y-2 overflow-auto">
+                {logs.map((l) => (
+                  <div key={l.id} className="rounded-xl border p-2 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium">
+                        {l.title}
+                      </div>
+                      <span className="text-[11px] text-gray-500">{l.time}</span>
                     </div>
+                    {l.detail && (
+                      <div className="mt-1 text-xs text-gray-700">{l.detail}</div>
+                    )}
+                    {l.meta && (
+                      <div className="mt-1 flex flex-wrap gap-1.5 text-[11px] text-gray-600">
+                        {'cost' in l.meta && (
+                          <span className="px-1.5 py-0.5 rounded-lg border bg-gray-50">
+                            비용 {fmtNum(l.meta.cost)} G
+                          </span>
+                        )}
+                        {'attemptsLeft' in l.meta && (
+                          <span className="px-1.5 py-0.5 rounded-lg border bg-gray-50">
+                            남은 가공 {l.meta.attemptsLeft}회
+                          </span>
+                        )}
+                        {'rerollDelta' in l.meta && l.meta.rerollDelta !== 0 && (
+                          <span className="px-1.5 py-0.5 rounded-lg border bg-gray-50">
+                            다른 항목 보기 {l.meta.rerollDelta > 0 ? `+${l.meta.rerollDelta}` : l.meta.rerollDelta}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
-
               </div>
-
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <button onClick={doReroll} disabled={rerollDisabled}
-                  className={`h-10 px-3 rounded-xl border ${rerollDisabled ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2`}>
-                  <RefreshCcw size={16} />
-                  다른 항목 보기 {manual.rerolls}회
-                </button>
-                <span className="text-xs text-gray-600">
-                  {manual.attemptsLeft <= 0
-                    ? "가공 완료"
-                    : !manual.unlocked
-                      ? "다른 항목 보기는 첫 가공 이후 가능합니다."
-                      : manual.rerolls <= 0
-                        ? "리롤 없음"
-                        : (rerollAdvice.shouldReroll ? "리롤 추천" : "리롤 비추천")}
-                </span>
-              </div>
-
-              {manual.unlocked && manual.rerolls > 0 && (
-                <div className="mt-2 text-xs text-gray-700">{rerollAdvice.reason}</div>
-              )}
-            </div>
-          </div>
-        </section>
+            )}
+          </section>
+        </div>
 
         {/* 5) 결과 출력 */}
         <section className={card}>
@@ -1684,6 +1934,7 @@ export default function GemSimulator() {
             </>
           )}
         </section>
+
 
 
 
