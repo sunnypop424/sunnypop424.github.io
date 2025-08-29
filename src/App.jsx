@@ -11,7 +11,7 @@ function App() {
   const openCoreInNewWindow = () => {
     // 현재 오리진/경로를 유지한 채 #/core만 붙여 새창 오픈
     const url = `${window.location.origin}${window.location.pathname}#/core`;
-    window.open(url, "_blank", "popup=yes,width=1200,height=800,resizable=yes,scrollbars=yes");
+    window.open(url, "_blank", "popup=no,width=1200,height=800,resizable=yes,scrollbars=yes");
   };
 
   return (
