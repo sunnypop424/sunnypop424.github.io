@@ -41,3 +41,10 @@ body {
   animation: loaPulse .9s ease-in-out infinite;
   transition: outline-color .2s, border-color .2s, box-shadow .2s;
 }
+
+input[type="number"]:disabled {
+  opacity: 1;                        /* Dropdown과 동일 */
+  cursor: not-allowed;
+  background-color: #fff;              /* Safari 기본 흐림 배경 덮어쓰기 */
+  -webkit-text-fill-color: currentColor; /* iOS에서 텍스트 연하게 나오는 것 막기 */
+}
