@@ -1803,7 +1803,7 @@ export default function GemSimulator() {
                           />
                         </div>
                         <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                          기대 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
+                          평균 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
                         </div>
                       </div>
                       {/* RUN_TO_END */}
@@ -1821,7 +1821,7 @@ export default function GemSimulator() {
                           />
                         </div>
                         <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                          기대 골드: <b>{fmtNum(Math.round(resultRun.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
+                          평균 골드: <b>{fmtNum(Math.round(resultRun.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
                         </div>
                       </div>
                     </div>
