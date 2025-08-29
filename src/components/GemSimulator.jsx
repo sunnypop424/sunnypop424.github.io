@@ -57,6 +57,29 @@ const fmtProb = (p) => ((Math.max(0, Math.min(1, isNaN(p) ? 0 : p)) * 100).toFix
 const fmtNum = (n) => n.toLocaleString();
 const OFFICIAL_RNG = true;
 
+/* ===== 시뮬레이션 횟수 옵션/헬퍼 ===== */
+const SIM_OPTIONS = [
+  { value: 1000, label: "1,000회 (빠름)" },
+  { value: 5000, label: "5,000회 (보통)" },
+  { value: 10000, label: "10,000회 (추천)" },
+  { value: 50000, label: "50,000회 (정밀)" },
+];
+
+// 반복 수에 따른 수렴 기준(95% CI 반폭)과 배치 크기
+const epsilonByTrials = (n) => {
+  if (n >= 50000) return 0.002;   // ±0.2%p
+  if (n >= 10000) return 0.0035;  // ±0.35%p
+  if (n >= 5000)  return 0.005;   // ±0.5%p
+  return 0.007;                   // ±0.7%p
+};
+const batchByTrials = (n) => {
+  if (n >= 50000) return 1000;
+  if (n >= 10000) return 800;
+  if (n >= 5000)  return 600;
+  return 400;
+};
+
+
 
 /* =========================
    효과명/포지션/스코어/목표 (원본 유지)
@@ -520,16 +543,71 @@ function ToastStack({ toasts, onClose }) {
   );
 }
 
-function NumberInput({ value, set, min = MIN_STAT, max = 99, disabled }) {
+function NumberInput({
+  value,
+  onChange,          // (number|null)=>void
+  min,
+  max,
+  step = 1,
+  allowFloat = false,
+  zeroOnBlur = true, // blur 시 빈값을 0(or min)으로 보정할지
+  className = "",
+  inputProps = {},
+}) {
+  const toStr = (v) => (v === null || v === undefined ? "" : String(v));
+  const [inner, setInner] = React.useState(toStr(value));
+  React.useEffect(() => { setInner(toStr(value)); }, [value]);
+
+  const clamp = (n) => {
+    let x = n;
+    if (min != null && x < min) x = min;
+    if (max != null && x > max) x = max;
+    return x;
+  };
+
+  const normalizeOnBlur = (s) => {
+    if (s === "") return zeroOnBlur ? (min ?? 0) : null;
+    let n = Number(s);
+    if (!Number.isFinite(n)) return zeroOnBlur ? (min ?? 0) : null;
+    n = allowFloat ? n : Math.trunc(n);
+    return clamp(n);
+  };
+
+  // 휠로 값 바뀌는 사고 방지(선택)
+  const handleWheel = (e) => e.currentTarget.blur();
+
   return (
     <input
-      type="number"
-      value={value}
+      type="number"                     // ← 스핀/키보드 ↑↓ 유지
+      inputMode={allowFloat ? "decimal" : "numeric"}
+      step={step}
       min={min}
       max={max}
-      disabled={disabled}
-      onChange={(e) => set(clamp(parseInt(e.target.value || String(MIN_STAT), 10), min ?? MIN_STAT, max ?? 99))}
-      className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white"
+      value={inner}                     // ← "" 허용 (빈 입력 유지)
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === "") {
+          setInner("");
+          onChange?.(null);             // 입력 중 빈값은 null로 보존
+          return;
+        }
+        // number 타입은 브라우저가 숫자형 문자열만 넣어줌(예: "1", "1.2", "1e2")
+        setInner(v);
+        const num = Number(v);
+        if (Number.isFinite(num)) {
+          onChange?.(allowFloat ? num : Math.trunc(num)); // 입력 중에도 숫자 전달(필요하면 null로 바꿔도 됨)
+        } else {
+          onChange?.(null);
+        }
+      }}
+      onBlur={() => {
+        const n = normalizeOnBlur(inner);          // blur 시에만 확정/보정
+        setInner(n == null ? "" : String(n));
+        onChange?.(n);
+      }}
+      onWheel={handleWheel}
+      className={className}
+      {...inputProps}
     />
   );
 }
@@ -589,6 +667,8 @@ export default function GemSimulator() {
 
   // 시작 상태가 포지션 풀과 안 맞아도 계산은 진행 (이름 변경으로 충족 가능)
   const curValid = cur.aName !== cur.bName;
+  // 시뮬레이션 반복 수 (Monte Carlo maxTrials)
+  const [simTrials, setSimTrials] = useState(10000);
 
 
   const migratedRef = useRef(false); // StrictMode 중복 실행 방지(개발모드)
@@ -939,12 +1019,12 @@ export default function GemSimulator() {
       const stop = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "STOP_ON_SUCCESS",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames
-        , { maxTrials: 50000, epsilon: 0.002, batch: 1000 }
+        , { maxTrials: simTrials, epsilon: epsilonByTrials(simTrials), batch: batchByTrials(simTrials) }
       );
       const run = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "RUN_TO_END",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 103, tgtNames
-        , { maxTrials: 50000, epsilon: 0.002, batch: 1000 }
+        , { maxTrials: simTrials, epsilon: epsilonByTrials(simTrials), batch: batchByTrials(simTrials) }
       );
       if (token === tokenRef.current) { setResultStop(stop); setResultRun(run); setIsComputing(false); }
     }, 0);
@@ -956,7 +1036,7 @@ export default function GemSimulator() {
       }
     };
 
-  }, [gemKey, pos, rarity, curValid, manual, tgt, tgtLocked, manLabels, abModePrimary, tgtNames]);
+  }, [gemKey, pos, rarity, curValid, manual, tgt, tgtLocked, manLabels, abModePrimary, tgtNames, simTrials]);
 
 
 
@@ -1113,6 +1193,7 @@ export default function GemSimulator() {
     if (pos === "상관 없음") return base;
     return abModePrimary === "ANY_ONE" ? ["상관없음", ...base] : base; // BOTH면 '상관없음' 제외
   }, [gemKey, pos, abModePrimary]);
+  const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
 
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{ backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)", backgroundAttachment: "fixed" }}>
@@ -1126,6 +1207,19 @@ export default function GemSimulator() {
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">로아 아크그리드 젬 가공 확률 계산기</h1>
+            <div className="flex gap-2 w-auto ml-auto lg:ml-0">
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
+                <div className="min-w-[170px]">
+                  <Dropdown
+                    value={simTrials}
+                    onChange={setSimTrials}
+                    items={SIM_OPTIONS}
+                    placeholder="반복 수 선택"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1248,6 +1342,7 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={curLocked}
+                  className={smallFieldBase}
                 />
               </div>
 
@@ -1260,6 +1355,7 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={curLocked}
+                  className={smallFieldBase}
                 />
               </div>
 
@@ -1290,6 +1386,7 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
+                        className={smallFieldBase}
                       />
                     </div>
 
@@ -1314,6 +1411,7 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
+                        className={smallFieldBase}
                       />
                     </div>
                   </>
@@ -1398,6 +1496,7 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={tgtLocked}
+                  className={smallFieldBase}
                 />
               </div>
 
@@ -1410,6 +1509,7 @@ export default function GemSimulator() {
                   min={MIN_STAT}
                   max={MAX_STAT}
                   disabled={tgtLocked}
+                  className={smallFieldBase}
                 />
               </div>
 
@@ -1437,7 +1537,7 @@ export default function GemSimulator() {
                   <>
 
                     {/* 목표 이름 A */}
-                    <div className={`w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+                    <div className={`w-full lg:w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 A</label>
                       <Select
                         value={tgtNames.aName}
@@ -1458,11 +1558,12 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={effectsDisabled}
+                        className={smallFieldBase}
                       />
                     </div>
 
                     {/* 목표 이름 B (BOTH일 때만 활성) */}
-                    <div className={`w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
+                    <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 B</label>
                       <Select
                         value={tgtNames.bName}
@@ -1484,6 +1585,7 @@ export default function GemSimulator() {
                         min={MIN_STAT}
                         max={MAX_STAT}
                         disabled={bLevelDisabled}
+                        className={smallFieldBase}
                       />
                     </div>
 
