@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { CircleCheckBig, ThumbsUp } from 'lucide-react';
-
 function AvatarComparisonAuto() {
     const [avatarName, setAvatarName] = useState('');
     const [goldPer100Crystal, setGoldPer100Crystal] = useState(10000);
@@ -12,9 +11,7 @@ function AvatarComparisonAuto() {
     const [cheapestGroupSnapshot, setCheapestGroupSnapshot] = useState(null);
     const [selectedGrade, setSelectedGrade] = useState('전체');
     const [selectedCategory, setSelectedCategory] = useState('20000');
-
     const crystalRate = goldPer100Crystal / 95;
-
     const calculatePeonCost = (peons) => {
         const packRules = [
             { size: 100, cost: 850 },
@@ -30,15 +27,12 @@ function AvatarComparisonAuto() {
         }
         return totalCrystals * crystalRate;
     };
-
     const fetchPrices = async () => {
         const allowSearchWithoutName = selectedGrade === '전설' && selectedCategory !== '20000';
-
         if (!allowSearchWithoutName && (!avatarName.trim() || !selectedClass.trim())) {
             alert('영웅 아바타 검색시 직업과 아바타 이름을 모두 입력해주세요.');
             return;
         }
-
         setLoading(true);
         setError(null);
         try {
@@ -55,9 +49,7 @@ function AvatarComparisonAuto() {
                     grade: selectedGrade === '전체' ? null : selectedGrade,
                 }),
             });
-
             if (!res.ok) throw new Error('API 호출 실패');
-
             const data = await res.json();
             const groupByName = {};
             for (const item of data.items) {
@@ -67,17 +59,14 @@ function AvatarComparisonAuto() {
                         : `${item.tradeLeft}회`;
                 const grade = item.grade;
                 const icon = item.icon;
-
                 if (!groupByName[group]) {
                     groupByName[group] = { grade, items: {}, icon, displayName: item.name };
                 }
-
                 const current = groupByName[group].items[remain] ?? Infinity;
                 if (item.minPrice && item.minPrice < current) {
                     groupByName[group].items[remain] = item.minPrice;
                 }
             }
-
             // 📌 그룹별 minTotal 계산
             let minKey = null;
             let minValue = Infinity;
@@ -95,7 +84,6 @@ function AvatarComparisonAuto() {
                     minKey = key;
                 }
             }
-
             setGroupedPrices(groupByName);
             setCheapestGroupSnapshot(minKey); // ✅ 저장
             setHasFetched(true);
@@ -105,7 +93,6 @@ function AvatarComparisonAuto() {
             setLoading(false);
         }
     };
-
     const classList = [
         '디스트로이어', '워로드', '버서커', '홀리나이트', '슬레이어', '발키리',
         '배틀마스터', '인파이터', '기공사', '창술사', '스트라이커', '브레이커',
@@ -114,45 +101,36 @@ function AvatarComparisonAuto() {
         '블레이드', '데모닉', '리퍼', '소울이터',
         '도화가', '기상술사', '환수사'
     ];
-
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             fetchPrices();
         }
     };
-
     const showCheapestHighlight =
         hasFetched &&
         selectedGrade === '전설' &&
         selectedCategory !== '20000' &&
         avatarName.trim() === '';
-
     const cheapestGroupKey = showCheapestHighlight
         ? Object.entries(groupedPrices).reduce((minKey, [key, info]) => {
             const peons = info.grade?.includes('전설') ? 30 : info.grade?.includes('영웅') ? 10 : 0;
             const peonCost = calculatePeonCost(peons);
-
             // 🔽 이 그룹 내에서 가장 싼 total 가격
             const minTotalInGroup = Object.entries(info.items).reduce((min, [label, price]) => {
                 const needsPeon = label !== '3회';
                 const total = price + (needsPeon && peons > 0 ? peonCost : 0);
                 return Math.min(min, total);
             }, Infinity);
-
             info.minTotal = minTotalInGroup; // 전체 비교용
-
             if (!minKey) return key;
             return minTotalInGroup < groupedPrices[minKey].minTotal ? key : minKey;
         }, null)
         : null;
-
     console.log('✅ 그룹별 최소 total 비교용 minTotal:');
     Object.entries(groupedPrices).forEach(([key, info]) => {
         console.log(`- ${key}: ${info.minTotal?.toLocaleString()}G (${info.displayName})`);
     });
     console.log('🏆 가장 저렴한 그룹:', cheapestGroupKey);
-
-
     return (
         <div className='avatar'>
             <div className='wrapper'>
@@ -255,16 +233,13 @@ function AvatarComparisonAuto() {
                                     const p0 = items['거래불가'] || 0;
                                     const peons = grade?.toLowerCase().includes('전설') ? 30 : grade?.toLowerCase().includes('영웅') ? 10 : 0;
                                     const peonCost = calculatePeonCost(peons);
-
                                     const totalList = [
                                         p3 > 0 ? p3 : null,
                                         p2 > 0 ? p2 + (peons > 0 ? peonCost : 0) : null,
                                         p1 > 0 ? p1 + (peons > 0 ? peonCost : 0) : null,
                                         p0 > 0 ? p0 + (peons > 0 ? peonCost : 0) : null
                                     ].filter(val => val !== null);
-
                                     const minValue = Math.min(...totalList);
-
                                     const getDiffLabel = (value) => {
                                         if (totalList.length <= 1) return '';
                                         if (value === minValue) return (
@@ -279,7 +254,6 @@ function AvatarComparisonAuto() {
                                             </span>
                                         );
                                     };
-
                                     return (
                                         <div className='price-result' key={groupKey}>
                                             <img className='avatar-thumb' src={icon} alt={name} />
@@ -358,5 +332,4 @@ function AvatarComparisonAuto() {
         </div>
     );
 }
-
 export default AvatarComparisonAuto;

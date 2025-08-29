@@ -1,7 +1,6 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
 /* Design tokens via CSS variables */
 :root {
   /* Light theme tokens */
@@ -9,14 +8,12 @@
   --color-primary-foreground: 255 255 255;
   --color-accent: 228 2 46;               /* #E4022E */
   --color-accent-foreground: 255 255 255;
-
   --color-bg: 249 250 251;                /* gray-50 */
   --color-card: 255 255 255;
   --color-text: 17 24 39;                 /* gray-900 */
   --color-muted: 107 114 128;             /* gray-500 */
   --color-border: 229 231 235;            /* gray-200 */
 }
-
 .dark {
   /* Dark theme tokens */
   --color-bg: 17 24 39;                   /* gray-900 */
@@ -25,31 +22,25 @@
   --color-muted: 148 163 184;             /* slate-400 */
   --color-border: 51 65 85;               /* slate-700 */
 }
-
 /* Base resets */
 html, body, #root { height: 100%; }
 body { @apply bg-bg text-text font-sans antialiased; }
 a { @apply text-primary hover:underline; }
-
 /* Component layer: small, reusable shorthands (pure Tailwind output) */
 @layer components {
   .btn { @apply inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm font-medium shadow-soft border border-border bg-card text-text hover:shadow-soft-lg hover:bg-gray-50 active:scale-95 transition; }
   .btn-ghost { @apply bg-transparent border-transparent hover:bg-gray-100 dark:hover:bg-slate-800; }
   .btn-primary { @apply bg-primary text-primaryFg border-transparent hover:opacity-90; }
   .btn-accent { @apply bg-accent text-accentFg border-transparent hover:opacity-90; }
-
   .input { @apply w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-text placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50; }
   .select { @apply w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/50; }
   .label { @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1; }
   .helper { @apply text-xs text-muted; }
-
   .card { @apply rounded-2xl border border-border bg-card shadow-soft; }
   .section { @apply max-w-6xl mx-auto p-4 lg:p-6; }
-
   .tabs { @apply flex gap-2 border-b border-border; }
   .tab { @apply px-3 py-2 text-sm rounded-t-lg border border-border border-b-0 bg-card; }
   .tab-active { @apply bg-white dark:bg-slate-900 text-primary; }
-
   .badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-100; }
   .chip-indigo { @apply bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200; }
   .chip-emerald { @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-200; }

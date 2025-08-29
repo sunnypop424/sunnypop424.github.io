@@ -1,6 +1,5 @@
 // src/utils/openIsolatedWindow.js
 import { createRoot } from "react-dom/client";
-
 export function openIsolatedWindow(
   reactElement,
   { title = "LoA Core Optimizer", width = 1200, height = 800 } = {}
@@ -11,7 +10,6 @@ export function openIsolatedWindow(
     alert("팝업이 차단되었어요. 브라우저 팝업 허용을 켜주세요.");
     return;
   }
-
   // skeleton 문서 주입 (프로젝트 전역 CSS는 복사 X → AvatarComparisonAuto.css 영향 차단)
   win.document.open();
   win.document.write(`
@@ -38,7 +36,6 @@ export function openIsolatedWindow(
     </html>
   `);
   win.document.close();
-
   // #root가 만들어질 때까지 짧게 폴링 후 마운트
   const tryMount = () => {
     const el = win.document.getElementById("root");
@@ -58,7 +55,6 @@ export function openIsolatedWindow(
       return false;
     }
   };
-
   if (!tryMount()) {
     const iv = win.setInterval(() => {
       if (tryMount()) win.clearInterval(iv);

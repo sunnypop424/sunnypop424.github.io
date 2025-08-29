@@ -4,7 +4,6 @@ import './components/AvatarComparisonAuto.css';
 import AvatarComparisonAuto from './components/AvatarComparisonAuto';
 import PeonCalculator from './components/PeonCalculator';
 import KakaoAdfit from './components/KakaoAdfit';
-
 function App() {
   const [activeTab, setActiveTab] = useState('peon');
   
@@ -13,7 +12,6 @@ function App() {
     const url = `${window.location.origin}${window.location.pathname}#/core`;
     window.open(url, "_blank", "popup=no,width=1200,height=800,resizable=yes,scrollbars=yes");
   };
-
   return (
     <div className="app-container">
       <div className="tab-buttons">
@@ -41,5 +39,4 @@ function App() {
     </div>
   );
 }
-
 export default App;

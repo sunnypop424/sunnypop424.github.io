@@ -1,5 +1,4 @@
 /* AvatarComparisonAuto.css */
-
 /* http://meyerweb.com/eric/tools/css/reset/ 
    v2.0 | 20110126
    License: none (public domain)
@@ -11,7 +10,6 @@
     --swal2-border-radius: 12px;
     
 }
-
 html, body, div, span, applet, object, iframe,
 h1, h2, h3, h4, h5, h6, p, blockquote, pre,
 a, abbr, acronym, address, big, cite, code,
@@ -40,7 +38,6 @@ footer, header, hgroup, menu, nav, section {
 body {
 	line-height: 1.4;
 }
-
 ol, ul {
 	list-style: none;
 }
@@ -57,23 +54,19 @@ table {
 	border-spacing: 0;
 }
 /* reset css 끝 */
-
 /* webfont */
-
 @font-face {
     font-family: 'Paperlogy-4Regular';
     src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-4Regular.woff2') format('woff2');
     font-weight: 400;
     font-style: normal;
 }
-
 @font-face {
     font-family: 'Paperlogy-8ExtraBold';
     src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-8ExtraBold.woff2') format('woff2');
     font-weight: 800;
     font-style: normal;
 }
-
 @font-face {
     font-family: 'Paperlogy-9Black';
     src: url('https://fastly.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-9Black.woff2') format('woff2');
@@ -81,21 +74,17 @@ table {
     font-style: normal;
 }
 /* 기본스타일 */
-
 * {
   box-sizing: border-box;
   -webkit-box-sizing: border-box;
 }
-
 html {
   font-size: 12px;
 }
-
 body {
   font-family: 'Paperlogy-4Regular';
   font-size: 14px;
 }
-
 /* 기본 공통 스타일 */
 input[type="text"],
 input[type="number"],
@@ -195,7 +184,6 @@ input[type="range"]::-moz-range-thumb {
     border-radius: 50%;
     cursor: pointer;
 }
-
 input[type='number']::-webkit-inner-spin-button, 
 input[type='number']::-webkit-outer-spin-button { 
     -webkit-appearance: none;
@@ -327,7 +315,6 @@ textarea:disabled {
     cursor: not-allowed;
     opacity: 0.7;
 }
-
 /* checkbox & radio */
 input[type="checkbox"]:disabled,
 input[type="radio"]:disabled {
@@ -341,7 +328,6 @@ input[type="radio"]:disabled:checked::before {
     color: #bbb;
     background-color: #bbb;
 }
-
 /* range */
 input[type="range"]:disabled {
     background-color: #f0f0f0;
@@ -353,23 +339,18 @@ input[type="range"]:disabled::-moz-range-thumb {
     background: #ccc;
     cursor: not-allowed;
 }
-
-
 /* 기본 정의 완료 */
-
 body {
     min-height: 100vh;
     padding: 5rem 5rem 10rem;
     background: #85d8ea;
     background: linear-gradient(125deg, #85d8ea, #a399f2);
 }
-
 .avatar {
     display: flex;
     align-items: center;
     flex-direction: column;
 }
-
 .title {
     font-family: 'Paperlogy-8ExtraBold';
     text-align: center;
@@ -383,11 +364,9 @@ body {
     -webkit-text-fill-color: transparent;
     font-weight: 900;
 }
-
 .title,
 .wrapper {
 }
-
 .wrapper {
     display: flex;
     gap: 1rem;
@@ -395,7 +374,6 @@ body {
     max-width: 1100px;
     width: 100%;
 }
-
 .avatar-comparison,
 .comparison-result {
     background-color: #fff;
@@ -403,52 +381,42 @@ body {
     box-shadow: 0 8px 24px #959da533;
     padding: 2rem;
 }
-
 .avatar-comparison {
     display: flex;
     flex-direction: column;
 }
-
 .avatar-comparison .avatar-row {
     padding: 1rem 0;
     border-bottom: 1px solid #e4e4e4
 }
-
 .avatar-comparison label {
     display: block;
     padding-bottom: 1rem;
 }
-
 .avatar-comparison .avatar-row:first-of-type {
     padding-top: 0;
 }
-
 .avatar-comparison .avatar-row:last-of-type {
     padding-bottom: 0;
     margin-bottom: 1rem;
 }
-
 .search-info > div {
     padding-bottom: 1rem;
 }
-
 .search-info .info-box {
     padding: 1rem;
     border: 2px solid #e4e4e4;
     border-radius: 1rem;
 }
-
 .search-info .info-box + .info-box {
     margin-top: 0.5rem;
 }
-
 .avatar-comparison .label {
     display: block;
     font-size: 16px;
     line-height: 20px;
     padding-bottom: 0.5rem;
 }
-
 .price-result {
     margin-bottom: 2rem;
     background: #f5f7f9;
@@ -462,15 +430,12 @@ body {
     box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px;
     position: relative;
 }
-
 .price-result.flex-c {
     flex-direction: column;
 }
-
 .price-result:last-child {
     margin-bottom: 0;
 }
-
 .price-result .avatar-thumb {
     height: 78.8px;
     width: 78.8px;
@@ -480,30 +445,24 @@ body {
     border-radius: 1rem;
     
 }
-
 .price-result .avatar-info {
     flex: 1 1 0;
 }
-
 .price-result .avatar-info > ul > li {
     margin-bottom: 1rem;
 }
-
 .price-result .avatar-info > ul > li:last-child {
     margin-bottom: 0;
 }
-
 .price-result .name {
     display: flex;
     align-items: center;
     justify-content: space-between;
     margin-bottom: 1rem;
 }
-
 .price-result .name strong {
     font-size: 18px;
 }
-
 .price-result .grade {
     color:#ffffff;
     display: flex;
@@ -513,7 +472,6 @@ body {
     align-items: center;
     justify-content: center;
 }
-
 strong.grade-info {
     color:#ffffff;
     display: flex;
@@ -524,36 +482,29 @@ strong.grade-info {
     justify-content: center;
     margin-bottom: 0.5rem;
 }
-
 .legend {
     background-color: #f39303;
 }
-
 .heroic {
     background-color: #bf00fe;
 }
-
 .price-result .left {
     color: #666;
 }
-
 .price-result .left strong {
     font-weight: 600;
     color: #c00;
 }
-
 .price-result .badge {
     padding: 0.2rem 0.5rem;
     background: #ffffff;
     border-radius: 5px;
 }
-
 .price-result .badge.row-price {
     border: 2px solid #aaa1f3;
     background-color: #aaa1f3;
     color: #ffffff;
 }
-
 .price-result .badge.best-of-all {
     border: 2px solid #85d8ea;
     background-color: #85d8ea;
@@ -561,7 +512,6 @@ strong.grade-info {
     vertical-align: text-bottom;
     margin-left: 0.5rem;
 }
-
 .gold,
 .peon,
 .crystal {
@@ -575,44 +525,37 @@ strong.grade-info {
     position: relative;
     top: 1px;
 }
-
 .gold {
     background-position: -20px -142px;
     height: 19px;
     width: 18px;
 }
-
 .peon {
     background-position: -59px -111px;
     height: 20px;
     width: 21px;
 }
-
 .crystal {
     background-position: 0px -142px;
     height: 21px;
     width: 19px;
 }
-
 .mp-0 {
     margin-bottom: 0!important;
     padding-bottom: 0!important;
     border-bottom: 0!important;
 }
-
 .spinning {
     animation-name: spin;
     animation-duration: 2500ms;
     animation-iteration-count: infinite;
     animation-timing-function: linear;
 }
-
 .price-result.flex-c h3 {
     width: 100%;
     text-align: center;
     font-size: 1.4rem;
 }
-
 .price-result.flex-c .badge {
     position: absolute;
     top: 2rem;
@@ -625,7 +568,6 @@ strong.grade-info {
     align-items: center;
     justify-content: center;
 }
-
 .price-result.flex-c ul {
     margin: 1rem auto 0;
     padding: 1rem;
@@ -633,17 +575,14 @@ strong.grade-info {
     border-radius: 1rem;
     min-width: 270px;
 }
-
 .price-result.flex-c ul.recom {
     border: 2px solid #85d8ea;
     padding: 10px !important;
 }
-
 .price-result.flex-c ul.impact {
     border: 2px solid #aaa1f3;
     padding: 10px !important;
 }
-
 .price-result.flex-c ul li {
     display: flex;
     align-items: center;
@@ -653,11 +592,9 @@ strong.grade-info {
     margin-bottom: 0.5rem;
     height: 24px;
 }
-
 .price-result.flex-c ul li:last-child {
     margin-bottom: 0;
 }
-
 .price-result.flex-c ul li::after {
     content: '';
     width: 100%;
@@ -670,7 +607,6 @@ strong.grade-info {
     z-index: 1;
     margin-top: -1px;
 }
-
 .price-result.flex-c ul li p {
     background-color: #ffffff;
     position: relative;
@@ -678,21 +614,17 @@ strong.grade-info {
     padding: 0 0.5rem;
     margin: 0 -0.5rem;
 }
-
 .empty-result {
     text-align: center;
 }
-
 @keyframes spin {
     from {
         transform: rotate(0deg);
     }
-
     to {
         transform: rotate(360deg);
     }
 }
-
 @media screen and (max-width: 900px) {
     body {
         padding: 3rem 3rem 6rem;

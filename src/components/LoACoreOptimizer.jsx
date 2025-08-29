@@ -6,7 +6,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
-
 /* =============================== 타입(주석용 정의) =============================== */
 /** @typedef {"dealer"|"support"} Role */
 /** @typedef {"atk"|"add"|"boss"|"brand"|"allyDmg"|"allyAtk"} OptionKey */
@@ -15,7 +14,6 @@ import './LoACoreOptimizer.css';
 /** @typedef {{[k in OptionKey]: number}} Weights */
 /** @typedef {{ id:string, name:string, grade:CoreGrade, minThreshold?:number, enforceMin:boolean }} CoreDef */
 /** @typedef {{ list: Gem[], totalWill:number, totalPoint:number, thr:number[], roleSum:number, score:number }} ComboInfo */
-
 /* =============================== 상수 정의 =============================== */
 const CORE_SUPPLY = { HERO: 7, LEGEND: 11, RELIC: 15, ANCIENT: 17 };
 const CORE_THRESHOLDS = {
@@ -26,7 +24,6 @@ const CORE_THRESHOLDS = {
 };
 const CORE_LABEL = { HERO: "영웅", LEGEND: "전설", RELIC: "유물", ANCIENT: "고대" };
 const GRADES = ["HERO", "LEGEND", "RELIC", "ANCIENT"];
-
 const OPTION_LABELS = {
   atk: "공격력",
   add: "추가 피해",
@@ -36,29 +33,23 @@ const OPTION_LABELS = {
   allyAtk: "아군 공격 강화",
 };
 const OPTIONS = ["atk","add","boss","brand","allyDmg","allyAtk"];
-
 const ROLE_KEYS = {
   dealer: new Set(["atk","add","boss"]),
   support: new Set(["brand","allyDmg","allyAtk"]),
 };
 const DEFAULT_WEIGHTS = { atk:1, add:1, boss:1, brand:1, allyDmg:1, allyAtk:1 };
-
 const CORE_NAME_ITEMS = [
   { value: "해 코어", label: "해 코어" },
   { value: "달 코어", label: "달 코어" },
   { value: "별 코어", label: "별 코어" },
 ];
-
 /* =============================== 유틸/헬퍼 =============================== */
-
 const CORE_ORDER = ["해 코어","달 코어","별 코어"];
 function nextAvailableCoreName(existingNames){
   for (const n of CORE_ORDER) if (!existingNames.has(n)) return n;
   return null; // 모두 사용됨
 }
-
 const uid = () => Math.random().toString(36).slice(2,9);
-
 function sanitizeWeights(w){
   const base = { ...DEFAULT_WEIGHTS };
   if(!w) return base;
@@ -95,7 +86,6 @@ function scoreCombo(combo, grade, role, weights){
   const score = (thr.length*10_000_000) + (totalPoint*10_000) + ((5_000 - totalWill)*10) + roleSum - combo.length;
   return { totalWill, totalPoint, thr, roleSum, score };
 }
-
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
 function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin){
   const supply = CORE_SUPPLY[grade];
@@ -103,7 +93,6 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
   const effMin = minThreshold ?? minOfGrade;
   const effEnforce = enforceMin || minThreshold == null;
-
   /** @type {ComboInfo[]} */
   const all = [];
   const maxPick = Math.min(4, pool.length);
@@ -117,7 +106,6 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
     }
   }
   all.sort((a,b)=>b.score-a.score);
-
   let filtered;
   if(effEnforce){
     filtered = all.filter(ci => {
@@ -132,12 +120,9 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   }
   return filtered.slice(0,200);
 }
-
-
 /* ===== 라운드 로빈 타깃 업그레이드 그리디 ===== */
 function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80) {
   const W = sanitizeWeights(weights);
-
   const thresholdsOf = (grade) => CORE_THRESHOLDS[grade];
   const minOf = (grade) => Math.min(...thresholdsOf(grade));
   const nextThreshold = (grade, current) => {
@@ -161,12 +146,10 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
     return ok[0];
   };
   const bestScore = (cands) => cands.sort((a,b)=>b.score-a.score)[0] || null;
-
   // 코어별 현재 pick과 남은 젬 풀
   /** @type {ComboInfo[]} */
   const picks = Array.from({length: cores.length}, () => ({ list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 }));
   let remaining = pool.slice();
-
   // 후보 생성기 (풀과 조건에 따라 매번 생성)
   const candidatesFor = (core, gemPool) => {
     const list = enumerateCoreCombos(gemPool, core.grade, role, W, core.minThreshold, core.enforceMin)
@@ -175,7 +158,6 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
       .slice(0, perCoreLimit);
     return list;
   };
-
   // 젬 사용/반납 헬퍼
   const removeUsed = (gemPool, combo) => {
     if (!combo || !combo.list) return gemPool;
@@ -189,13 +171,11 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
     const add = combo.list.filter(g=>!inPool.has(g.id));
     return gemPool.concat(add);
   };
-
   // 1) 1라운드: 강제 최소(effMin) 먼저 전부 달성 (가능하면)
   for (let i=0;i<cores.length;i++){
     const c = cores[i];
     const effMin = (c.minThreshold ?? minOf(c.grade));
     const cands = candidatesFor(c, remaining);
-
     let choice = null;
     if (c.enforceMin) {
       choice = bestMinHit(cands, effMin) || bestScore(cands);
@@ -206,7 +186,6 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
     picks[i] = choice || { list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 };
     remaining = removeUsed(remaining, picks[i]);
   }
-
   // 2) 모두 목표(effMin) 달성했는지 확인
   const allMinOk = cores.every((c, i) => {
     if (!c.enforceMin) return true; // 비강제는 패스
@@ -214,29 +193,24 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
     const maxThr = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
     return maxThr >= effMin;
   });
-
   if (!allMinOk) {
     // 최소도 안 되는 상황이면 여기서 종료(현 그리디 결과 반환)
     return { picks };
   }
-
   // 3) 라운드 로빈 업그레이드: 1→2→3 코어 다음 구간, 그 다음 라운드엔 다다음 구간…
   let progressed = true;
   while (progressed) {
     progressed = false;
-
     for (let i=0;i<cores.length;i++){
       const c = cores[i];
       // 현재 달성 구간(없으면 0)
       const curMax = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
       const nxt = nextThreshold(c.grade, curMax);
       if (nxt == null) continue; // 더 이상 업그레이드 구간 없음
-
       // 이 코어가 쓰던 젬을 잠시 반환하고, 업그레이드 시도
       let poolWithRefund = returnUsed(remaining, picks[i]);
       const cands = candidatesFor(c, poolWithRefund);
       const upgrade = bestMinHit(cands, nxt);
-
       if (upgrade) {
         // 성공: 새 픽으로 교체
         //  - 기존 픽 젬은 refund 상태에서 제거되었을 것이므로, 남은 풀은 새 픽 사용분만 빼면 됨
@@ -252,15 +226,10 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
       }
     }
   }
-
   return { picks };
 }
-
-
-
 /* =============================== Portal-aware Draggable =============================== */
 const dragPortal = typeof document !== "undefined" ? document.body : null;
-
 function PortalAwareDraggable({ draggableId, index, children }) {
   return (
     <Draggable draggableId={draggableId} index={index}>
@@ -275,7 +244,6 @@ function PortalAwareDraggable({ draggableId, index, children }) {
     </Draggable>
   );
 }
-
 /* =============================== 공통 UI 훅/컴포넌트 =============================== */
  function useOnClickOutside(refs, handler){
    const refsArray = React.useMemo(
@@ -286,7 +254,6 @@ function PortalAwareDraggable({ draggableId, index, children }) {
    // 최신 handler를 참조하도록 ref로 보관
    const handlerRef = React.useRef(handler);
    React.useEffect(() => { handlerRef.current = handler; }, [handler]);
-
    React.useEffect(() => {
      const listener = (e) => {
        if (refsArray.some(r => r?.current && r.current.contains(e.target))) return;
@@ -303,17 +270,14 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
   const menuRef = useRef(null);
   const menuPos = useRef({ top: 0, left: 0, width: 0 });
   const [, forceTick] = useState(0);   // 포지션 리렌더 트리거(값은 사용 안 함)
-
   // 전역 close-all-dropdowns 이벤트 받으면 닫기
   useEffect(() => {
     const h = () => setOpen(false);
     window.addEventListener('close-all-dropdowns', h);
     return () => window.removeEventListener('close-all-dropdowns', h);
   }, []);
-
   // 버튼/메뉴 외부 클릭 시 닫기 (둘 다 제외)
   useOnClickOutside([btnRef, menuRef], () => setOpen(false));
-
   // 열릴 때 버튼 위치 측정 → 고정 포지션으로 포탈 렌더
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
@@ -324,7 +288,6 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
       width: rect.width,
     };
     forceTick((v) => v + 1);
-
     const onScroll = () => {
       const r = btnRef.current?.getBoundingClientRect();
       if (!r) return;
@@ -342,7 +305,6 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
       window.removeEventListener("resize", onScroll);
     };
   }, [open]);
-
   const selected = items.find((i) => i.value === value);
   const menu = open ? (
     <AnimatePresence>
@@ -383,7 +345,6 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
       </motion.ul>
     </AnimatePresence>
   ) : null;
-
   return (
     <div ref={btnRef} className={`relative min-w-0 ${className || ""}`}>
       <button
@@ -402,7 +363,6 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
     </div>
   );
 }
-
 function useToasts(){
   const [toasts, setToasts] = useState([]);
   const push = (msg) => {
@@ -427,7 +387,6 @@ function ToastStack({ toasts, onClose }){
     </div>
   );
 }
-
 function NumberInput({
   value,
   onChange,          // (number|null)=>void
@@ -442,14 +401,12 @@ function NumberInput({
   const toStr = (v) => (v === null || v === undefined ? "" : String(v));
   const [inner, setInner] = React.useState(toStr(value));
   React.useEffect(() => { setInner(toStr(value)); }, [value]);
-
   const clamp = (n) => {
     let x = n;
     if (min != null && x < min) x = min;
     if (max != null && x > max) x = max;
     return x;
   };
-
   const normalizeOnBlur = (s) => {
     if (s === "") return zeroOnBlur ? (min ?? 0) : null;
     let n = Number(s);
@@ -457,10 +414,8 @@ function NumberInput({
     n = allowFloat ? n : Math.trunc(n);
     return clamp(n);
   };
-
   // 휠로 값 바뀌는 사고 방지(선택)
   const handleWheel = (e) => e.currentTarget.blur();
-
   return (
     <input
       type="number"                     // ← 스핀/키보드 ↑↓ 유지
@@ -496,17 +451,11 @@ function NumberInput({
     />
   );
 }
-
-
-
-
 /* =============================== 메인 앱 =============================== */
 export default function LoACoreOptimizer(){
-
   useEffect(() => {
     document.title = "로아 아크그리드 젬 장착 헬퍼";
   }, []);
-
   const [role, setRole] = useState("dealer");
   const [weights, setWeights] = useState({...DEFAULT_WEIGHTS});
   const [highlightCoreId, setHighlightCoreId] = useState(null);   // 최근 추가 코어 ID
@@ -514,7 +463,6 @@ export default function LoACoreOptimizer(){
   const [cores, setCores] = useState([]);
   const [gems, setGems] = useState([]);
   const { toasts, push, remove } = useToasts();
-
   
 const moveCoreUp = (index) => setCores(prev => {
   if (index <= 0) return prev;
@@ -522,15 +470,12 @@ const moveCoreUp = (index) => setCores(prev => {
   [next[index - 1], next[index]] = [next[index], next[index - 1]];
   return next;
 });
-
 const moveCoreDown = (index) => setCores(prev => {
   if (index >= prev.length - 1) return prev;
   const next = [...prev];
   [next[index + 1], next[index]] = [next[index], next[index + 1]];
   return next;
 });
-
-
   const { picks: priorityPicks } = useMemo(
     () => optimizeRoundRobinTargets(cores, gems, role, weights, /* perCoreLimit */ 80),
     [cores, gems, role, weights]
@@ -541,13 +486,11 @@ const moveCoreDown = (index) => setCores(prev => {
     setGems(v => [{ id, will: null, point: null, o1k:"atk", o1v:0, o2k:"add", o2v:0 }, ...v]);
     setHighlightGemId(id);
   };
-
   const removeGem = (id)=> {
     setGems(v=> v.filter(g=> g.id!==id));
     if (highlightGemId === id) setHighlightGemId(null);
   };
   const updateGem = (id, patch) => setGems(v => v.map(g => g.id === id ? { ...g, ...patch } : g));
-
   const addCore = ()=> setCores(cs=>{
     if (cs.length >= 3) { push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
     const existing = new Set(cs.map(c=>c.name));
@@ -574,10 +517,8 @@ const moveCoreDown = (index) => setCores(prev => {
     }
     return cs.map(c=> c.id===id? {...c, ...patch}: c);
   });
-
   // Drag state (for backdrop blur toggle)
   const [dragging, setDragging] = useState(false);
-
   // DnD: 코어 순서가 곧 우선순위(위쪽이 더 높음)
 const onDragStart = () => {
   requestAnimationFrame(() => setDragging(true));
@@ -595,18 +536,15 @@ const onDragStart = () => {
       return next;
     });
   };
-
   // UI tokens (모바일 최적화 포함)
   const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
   const card = "bg-white rounded-2xl shadow-sm";
   const chip = "px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs lg:text-[13px]";
   const labelCls = "block text-xs text-gray-500 mb-1";
-
   // 인덱스 표기: 코어(위→1), 젬(아래→1)
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
-
   // ===== Self-tests (non-blocking) =====
   useEffect(() => {
     function runSelfTests(){
@@ -627,7 +565,6 @@ const onDragStart = () => {
     }
     runSelfTests();
   }, []);
-
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{
       backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)",
@@ -641,10 +578,8 @@ const onDragStart = () => {
         .accent-primary{ accent-color:#a399f2; }
         .ring-primary:focus{ outline:none; box-shadow:0 0 0 2px rgba(163,153,242,.35); }
       `}</style>
-
       {/* 모든 버튼 커서 포인터 */}
       <style>{`button{cursor:pointer}`}</style>
-
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         {/* 타이틀 + 포지션(우측) */}
         <section className="py-2 lg:py-3">
@@ -660,7 +595,6 @@ const onDragStart = () => {
             </div>
           </div>
         </section>
-
         {/* 코어 입력 (DnD 우선순위) */}
         <section className={`${card} p-4 lg:p-6 !mt-2 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3">
@@ -671,7 +605,6 @@ const onDragStart = () => {
           </div>
           <p className="hidden lg:block text-xs text-gray-600">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
           <p className="block lg:hidden text-xs text-gray-600">화살표로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
-
           <div className="mt-3">
             <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
               <Droppable droppableId="cores-droppable" ignoreContainerClipping={true}>
@@ -694,27 +627,22 @@ const onDragStart = () => {
                             <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible ${c.id===highlightCoreId ? 'LoA-highlight' : ''}`} style={prov.draggableProps.style}>
                               {/* Index badge - 모바일 좌측 정렬, 데스크톱 중앙 정렬 */}
                               <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl self-start lg:self-center">#{displayIndexCore(idx)}</div>
-
                               <div className="flex flex-col min-w-[120px] w-full lg:w-40">
                                 <label className={labelCls}>코어 종류</label>
                                 <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val)=>updateCore(c.id,{name: val})} items={coreNameItems} placeholder="코어명"/>
                               </div>
-
                               <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
                                 <label className={labelCls}>코어 등급</label>
                                 <Dropdown className="w-full lg:w-40" value={c.grade} onChange={(val)=>updateCore(c.id,{grade: /** @type {CoreGrade} */(val)})} items={GRADES.map(g=>({value:g, label: CORE_LABEL[g]}))} placeholder="코어 등급"/>
                               </div>
-
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>공급 의지력</label>
                                 <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center"><span className="text-primary font-semibold">{supply}</span></div>
                               </div>
-
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>목표 구간</label>
                                 <Dropdown className="w-full lg:w-40" value={String(c.minThreshold ?? '')} onChange={(val)=>{ if(val) updateCore(c.id,{minThreshold:Number(val), enforceMin:true}); else updateCore(c.id,{minThreshold:undefined, enforceMin:false}); }} items={targetItems} placeholder="구간"/>
                               </div>
-
                               <div className="flex flex-col w-full lg:w-auto">
                                 <div className="flex items-center gap-2">
                                   <input id={`enf-${c.id}`} type="checkbox" className="accent-primary" checked={c.enforceMin} onChange={(e)=>updateCore(c.id,{enforceMin:e.target.checked})}/>
@@ -722,7 +650,6 @@ const onDragStart = () => {
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">선택 안 함이면 내부적으로 <br className="hidden lg:block"/>최소 구간 <b className="text-primary">{minOfGrade}P</b>을 기본 목표로 적용합니다.</p>
                               </div>
-
                               {/* 모바일: 순서 버튼 + 삭제 버튼 묶음 */}
                               <div className="lg:ml-auto lg:static absolute top-2 right-2 flex items-center gap-1">
                                 <div className="hidden lg:hidden" />
@@ -745,7 +672,6 @@ const onDragStart = () => {
             {cores.length===0 && <div className="text-sm text-gray-700 p-2 text-center">코어를 추가하세요. (최대 3개의 코어까지 추가할 수 있습니다)</div>}
           </div>
         </section>
-
         {/* 젬 입력 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3 mb-3">
@@ -755,12 +681,10 @@ const onDragStart = () => {
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={()=>setGems([])} aria-label="전체 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 전체 삭제</span></button>
             </div>
           </div>
-
           <div className="flex flex-col gap-3">
             {gems.map((g,idx)=> (
               <div key={g.id} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white ${g.id===highlightGemId ? 'LoA-highlight' : ''}`}>
                 <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none">#{displayIndexGem(idx, gems.length)}</div>
-
                 {/* 필요 의지력 + 포인트 */}
                 <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
                   <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
@@ -790,7 +714,6 @@ const onDragStart = () => {
                     />
                   </div>
                 </div>
-
                 {/* 옵션 1 */}
                 <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                   <div className="flex-1 lg:flex-none min-w-0">
@@ -811,7 +734,6 @@ const onDragStart = () => {
                     />
                   </div>
                 </div>
-
                 {/* 옵션 2 */}
                 <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                   <div className="flex-1 lg:flex-none min-w-0">
@@ -832,7 +754,6 @@ const onDragStart = () => {
                     />
                   </div>
                 </div>
-
                 <div className="lg:static absolute top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
                   <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border-0 lg:border text-red-600 inline-flex items-center justify-center gap-2" onClick={()=>removeGem(g.id)} aria-label="젬 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 삭제</span></button>
                 </div>
@@ -841,7 +762,6 @@ const onDragStart = () => {
             {gems.length===0 && <div className="text-sm text-gray-700 p-2 text-center">젬을 추가하세요.</div>}
           </div>
         </section>
-
         {/* 유효옵션 가중치 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <div className="flex items-center gap-2 lg:gap-3">
@@ -867,7 +787,6 @@ const onDragStart = () => {
             </div>
           </div>
         </section>
-
         {/* 결과 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
@@ -900,7 +819,6 @@ const onDragStart = () => {
                       </div>
                     )}
                   </div>
-
                   {!hasResult ? (
                     <div className="text-sm text-gray-700 mt-2">
                       결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 구간을 만족하지 못합니다.{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
@@ -971,9 +889,7 @@ const onDragStart = () => {
           </div>
         </section>
       </div>
-
       <ToastStack toasts={toasts} onClose={remove}/>
-
       <div className="mt-6">
         <KakaoAdfit />
       </div>

@@ -7,7 +7,6 @@
   padding: 0 2rem;
   justify-content: flex-end;
 }
-
 .tab {
   border-radius: 1rem 1rem 0 0;
   padding: 0 1.5rem;
@@ -17,23 +16,19 @@
   box-shadow: rgba(0, 0, 0, 0.16) 0px 1px 4px;
   color: #aaaaaa;
 }
-
 /* .tab:nth-child(2n-1) {
   background-color: #85d8ea;
   border-color: #85d8ea;
 }
-
 .tab:nth-child(2n) {
   background-color: #aaa1f3;
   border-color: #aaa1f3;
 } */
-
 .tab.active {
   background-color: #e6f9fd;
   border-color: #e6f9fd;
   color: #000000;
 }
-
 .kakao-adfit-container {
   position: fixed;
   bottom: 0;
@@ -46,12 +41,10 @@
   box-shadow: rgba(0, 0, 0, 0.16) 0px 10px 36px 0px, rgba(0, 0, 0, 0.06) 0px 0px 0px 1px;
   z-index: 999;
 }
-
 .kakao-adfit-container ins {
   vertical-align: top;
   max-width: 320px;
 }
-
 @media screen and (max-width: 540px) {
   .tab .none {
     display: none;

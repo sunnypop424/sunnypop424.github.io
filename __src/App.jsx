@@ -1,13 +1,10 @@
 import "./index.css";
 import React, { useEffect, useState } from "react";
-
 import AvatarComparisonAuto from "./components/AvatarComparisonAuto";
 import PeonCalculator from "./components/PeonCalculator";
 import ArkGridOptimizer from "./components/ArkGridOptimizer";
-
 function DarkModeToggle() {
   const [dark, setDark] = useState(false);
-
   useEffect(() => {
     const saved = localStorage.getItem("theme");
     const prefers = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -15,12 +12,10 @@ function DarkModeToggle() {
     setDark(d);
     document.documentElement.classList.toggle("dark", d);
   }, []);
-
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     localStorage.setItem("theme", dark ? "dark" : "light");
   }, [dark]);
-
   return (
     <button
       onClick={() => setDark((v) => !v)}
@@ -31,10 +26,8 @@ function DarkModeToggle() {
     </button>
   );
 }
-
 function App() {
   const [activeTab, setActiveTab] = useState("peon");
-
   return (
     <div className="section">
       <DarkModeToggle />
@@ -58,7 +51,6 @@ function App() {
           아바타 <span>가격 비교 계산기</span>
         </button>
       </div>
-
       <div className="pt-4">
         {activeTab === "optimizer" && <ArkGridOptimizer />}
         {activeTab === "peon" && <PeonCalculator />}
@@ -67,5 +59,4 @@ function App() {
     </div>
   );
 }
-
 export default App;

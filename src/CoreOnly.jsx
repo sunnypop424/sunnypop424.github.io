@@ -3,18 +3,14 @@ import { HashRouter, Routes, Route, Navigate, NavLink } from "react-router-dom";
 import LoACoreOptimizer from "./components/LoACoreOptimizer";
 import GemSimulator from "./components/GemSimulator";
 import { ChevronUp } from "lucide-react";
-
-
 /**
  * CoreOnly as pages via HashRouter
  * - 해시 URL: #/core/gem, #/core/optimizer
  * - 기본 리다이렉트: #/core/optimizer
  * - 상단 네비는 NavLink (접근성 role="navigation")
  */
-
 function useNearBottom(offset = 520) {
   const [near, setNear] = React.useState(false);
-
   React.useEffect(() => {
     const onScroll = () => {
       const doc = document.documentElement;
@@ -29,13 +25,10 @@ function useNearBottom(offset = 520) {
       window.removeEventListener("resize", onScroll);
     };
   }, [offset]);
-
   return near;
 }
-
 function TopFab() {
   const visible = useNearBottom(520); // 아래 끝 520px 근처에서 등장
-
   return (
     <div className="fixed z-50 right-4 bottom-4 sm:right-6 sm:bottom-6 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
       <button
@@ -55,9 +48,6 @@ function TopFab() {
     </div>
   );
 }
-
-
-
 export default function CoreOnly() {
   return (
     <HashRouter basename="/core">
@@ -82,7 +72,6 @@ export default function CoreOnly() {
             젬 가공 헬퍼
           </NavLink>
         </li>
-
         <li>
           <NavLink
             to="/optimizer"
@@ -103,9 +92,6 @@ export default function CoreOnly() {
     </nav>
   </div>
 </header>
-
-
-
         {/* 라우트 영역 */}
         <main>
           <Routes>

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState, useRef, Suspense } from "react";
 import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-
 /* =============================== 타입(주석용 정의) =============================== */
 /** @typedef {"dealer"|"support"} Role */
 /** @typedef {"atk"|"add"|"boss"|"brand"|"allyDmg"|"allyAtk"} OptionKey */
@@ -11,7 +10,6 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 /** @typedef {{[k in OptionKey]: number}} Weights */
 /** @typedef {{ id:string, name:string, grade:CoreGrade, minThreshold?:number, enforceMin:boolean }} CoreDef */
 /** @typedef {{ list: Gem[], totalWill:number, totalPoint:number, thr:number[], roleSum:number, score:number }} ComboInfo */
-
 /* =============================== 상수 정의 =============================== */
 const CORE_SUPPLY = { HERO: 7, LEGEND: 11, RELIC: 15, ANCIENT: 17 };
 const CORE_THRESHOLDS = {
@@ -22,7 +20,6 @@ const CORE_THRESHOLDS = {
 };
 const CORE_LABEL = { HERO: "영웅", LEGEND: "전설", RELIC: "유물", ANCIENT: "고대" };
 const GRADES = ["HERO", "LEGEND", "RELIC", "ANCIENT"];
-
 const OPTION_LABELS = {
   atk: "공격력",
   add: "추가 피해",
@@ -32,22 +29,18 @@ const OPTION_LABELS = {
   allyAtk: "아군 공격 강화",
 };
 const OPTIONS = ["atk","add","boss","brand","allyDmg","allyAtk"];
-
 const ROLE_KEYS = {
   dealer: new Set(["atk","add","boss"]),
   support: new Set(["brand","allyDmg","allyAtk"]),
 };
 const DEFAULT_WEIGHTS = { atk:1, add:1, boss:1, brand:1, allyDmg:1, allyAtk:1 };
-
 const CORE_NAME_ITEMS = [
   { value: "해 코어", label: "해 코어" },
   { value: "달 코어", label: "달 코어" },
   { value: "별 코어", label: "별 코어" },
 ];
-
 /* =============================== 유틸/헬퍼 =============================== */
 const uid = () => Math.random().toString(36).slice(2,9);
-
 function sanitizeWeights(w){
   const base = { ...DEFAULT_WEIGHTS };
   if(!w) return base;
@@ -84,7 +77,6 @@ function scoreCombo(combo, grade, role, weights){
   const score = (thr.length*10_000_000) + (totalPoint*10_000) + ((5_000 - totalWill)*10) + roleSum - combo.length;
   return { totalWill, totalPoint, thr, roleSum, score };
 }
-
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
 function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin){
   const supply = CORE_SUPPLY[grade];
@@ -92,7 +84,6 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
   const effMin = minThreshold ?? minOfGrade;
   const effEnforce = enforceMin || minThreshold == null;
-
   /** @type {ComboInfo[]} */
   const all = [];
   const maxPick = Math.min(4, pool.length);
@@ -106,7 +97,6 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
     }
   }
   all.sort((a,b)=>b.score-a.score);
-
   let filtered;
   if(effEnforce){
     filtered = all.filter(ci => {
@@ -121,15 +111,12 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   }
   return filtered.slice(0,200);
 }
-
 /* 우선순위 기반 최적화(그리디): ★현재 배열 순서★(위→아래)가 우선순위 */
 function optimizeByPriority(cores, pool, role, weights){
   const W = sanitizeWeights(weights);
   const order = cores.map((c,i)=>({ i, pr:i })).sort((a,b)=>a.pr-b.pr);
-
   /** @type {ComboInfo[]} */
   const picks = Array.from({length: cores.length}, ()=>({ list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 }));
-
   let remaining = pool.slice();
   for(const { i } of order){
     const c = cores[i];
@@ -141,7 +128,6 @@ function optimizeByPriority(cores, pool, role, weights){
   }
   return { picks };
 }
-
 /* =============================== 공통 UI 훅/컴포넌트 =============================== */
 function useOnClickOutside(ref, handler){
   React.useEffect(()=>{
@@ -177,7 +163,6 @@ function Dropdown({ value, items, onChange, placeholder, className }){
     </div>
   );
 }
-
 function useToasts(){
   const [toasts, setToasts] = useState([]);
   const push = (msg) => {
@@ -202,7 +187,6 @@ function ToastStack({ toasts, onClose }){
     </div>
   );
 }
-
 /* =============================== Optimizer (탭 1) =============================== */
 function ArkGridOptimizer(){
   const [role, setRole] = useState("dealer");
@@ -217,9 +201,7 @@ function ArkGridOptimizer(){
     { id: uid(), will: 3, point: 4, o1k:"boss", o1v:4, o2k:"add", o2v:2 },
   ]);
   const { toasts, push, remove } = useToasts();
-
   const { picks: priorityPicks } = useMemo(()=> optimizeByPriority(cores, gems, role, weights), [cores, gems, role, weights]);
-
   const resetWeights = ()=> setWeights({...DEFAULT_WEIGHTS});
   const addGem = ()=> setGems(v=>[
     { id: uid(), will: 4, point: 4, o1k:"atk", o1v:0, o2k:"add", o2v:0 },
@@ -227,7 +209,6 @@ function ArkGridOptimizer(){
   ]);
   const removeGem = (id)=> setGems(v=> v.filter(g=> g.id!==id));
   const updateGem = (id, patch) => setGems(v => v.map(g => g.id === id ? { ...g, ...patch } : g));
-
   const addCore = ()=> setCores(cs=>{
     if(cs.length >= 3){ push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
     return [
@@ -237,7 +218,6 @@ function ArkGridOptimizer(){
   });
   const removeCore = (id)=> setCores(cs=> cs.length<=1 ? cs : cs.filter(c=> c.id!==id));
   const updateCore = (id, patch)=> setCores(cs=> cs.map(c=> c.id===id? {...c, ...patch}: c));
-
   // Mobile-friendly reorder helpers for cores
   const moveCoreUp = (index) => setCores(prev => {
     if(index <= 0) return prev;
@@ -251,7 +231,6 @@ function ArkGridOptimizer(){
     const tmp = next[index+1]; next[index+1] = next[index]; next[index] = tmp;
     return next;
   });
-
   // DnD: 코어 순서가 곧 우선순위(위쪽이 더 높음)
   const onDragEnd = (result) => {
     if (!result.destination) return;
@@ -262,16 +241,13 @@ function ArkGridOptimizer(){
       return next;
     });
   };
-
   const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-gray-900/10 bg-white";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
   const card = "bg-white rounded-2xl shadow-sm border";
   const chip = "px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs lg:text-[13px] border";
   const labelCls = "block text-xs text-gray-500 mb-1";
-
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
-
   return (
     <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
       {/* 타이틀 + 포지션(우측) */}
@@ -284,7 +260,6 @@ function ArkGridOptimizer(){
           </div>
         </div>
       </section>
-
       {/* 코어 입력 (DnD 우선순위) */}
       <section className={`${card} p-4 lg:p-6`}>
         <div className="flex items-center gap-2 lg:gap-3">
@@ -294,7 +269,6 @@ function ArkGridOptimizer(){
           </div>
         </div>
         <p className="text-xs text-gray-600 mt-2">드래그 앤 드롭으로 순서를 바꾸세요. <b>우선순위가 높은 항목을 1번(맨 위)으로 배치하세요.</b></p>
-
         <div className="mt-3">
           <DragDropContext onDragEnd={onDragEnd}>
             <Droppable droppableId="cores-droppable">
@@ -312,27 +286,22 @@ function ArkGridOptimizer(){
                           <div ref={prov.innerRef} {...prov.draggableProps} {...prov.dragHandleProps} className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-end border rounded-xl p-3 bg-white overflow-visible">
                             {/* Index badge - 모바일 왼쪽 정렬 / 데스크톱 중앙 */}
                             <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl self-start lg:self-center">#{displayIndexCore(idx)}</div>
-
                             <div className="flex flex-col min-w-[120px] w-full lg:w-40">
                               <label className={labelCls}>코어명</label>
                               <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val)=>updateCore(c.id,{name: val})} items={CORE_NAME_ITEMS} placeholder="코어명"/>
                             </div>
-
                             <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
                               <label className={labelCls}>코어 등급</label>
                               <Dropdown className="w-full lg:w-40" value={c.grade} onChange={(val)=>updateCore(c.id,{grade: /** @type {CoreGrade} */(val)})} items={GRADES.map(g=>({value:g, label: CORE_LABEL[g]}))} placeholder="코어 등급"/>
                             </div>
-
                             <div className="flex flex-col w-full lg:w-auto">
                               <label className={labelCls}>공급 의지력</label>
                               <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center">{supply}</div>
                             </div>
-
                             <div className="flex flex-col w-full lg:w-auto">
                               <label className={labelCls}>목표 구간</label>
                               <Dropdown className="w-full lg:w-40" value={String(c.minThreshold ?? '')} onChange={(val)=>{ if(val) updateCore(c.id,{minThreshold:Number(val), enforceMin:true}); else updateCore(c.id,{minThreshold:undefined, enforceMin:false}); }} items={targetItems} placeholder="구간"/>
                             </div>
-
                             <div className="flex flex-col w-full lg:w-auto">
                               <div className="flex items-center gap-2">
                                 <input id={`enf-${c.id}`} type="checkbox" className="accent-black" checked={c.enforceMin} onChange={(e)=>updateCore(c.id,{enforceMin:e.target.checked})}/>
@@ -340,7 +309,6 @@ function ArkGridOptimizer(){
                               </div>
                               <p className="text-xs text-gray-500 mt-1">선택 안 함이면 내부적으로 <b>{minOfGrade}P</b> 최소 구간을 기본 목표로 적용합니다.</p>
                             </div>
-
                             {/* 모바일: 순서 버튼 + 삭제 버튼 묶음 (삭제 왼쪽에 순서) */}
                             <div className="lg:ml-auto lg:static absolute top-2 right-2 flex items-center gap-1">
                               <div className="hidden lg:hidden" />
@@ -362,7 +330,6 @@ function ArkGridOptimizer(){
           </DragDropContext>
         </div>
       </section>
-
       {/* 젬 입력 */}
       <section className={`${card} p-4 lg:p-6`}>
         <div className="flex items-center gap-2 lg:gap-3 mb-3">
@@ -372,12 +339,10 @@ function ArkGridOptimizer(){
             <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 text-red-600" onClick={()=>setGems([])} aria-label="전체 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 전체 삭제</span></button>
           </div>
         </div>
-
         <div className="flex flex-col gap-3">
           {gems.map((g,idx)=> (
             <div key={g.id} className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white">
               <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none self-start lg:self-center">#{displayIndexGem(idx, gems.length)}</div>
-
               {/* 필요 의지력 + 포인트: 모바일 한 줄 / PC 기존 유지 */}
               <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
                 <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
@@ -389,7 +354,6 @@ function ArkGridOptimizer(){
                   <input type="number" min={0} step="1" title="포인트" className={`${smallFieldBase} w-full lg:w-24`} value={g.point} onChange={e=>updateGem(g.id,{point: Number(e.target.value)})} placeholder="포인트"/>
                 </div>
               </div>
-
               {/* 옵션 1 */}
               <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                 <div className="flex-1 lg:flex-none min-w-0">
@@ -401,7 +365,6 @@ function ArkGridOptimizer(){
                   <input type="number" step="1" className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-gray-900/10 bg-white w-full lg:w-20" value={g.o1v} onChange={e=>updateGem(g.id,{o1v: Number(e.target.value)})} placeholder="0"/>
                 </div>
               </div>
-
               {/* 옵션 2 */}
               <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                 <div className="flex-1 lg:flex-none min-w-0">
@@ -413,7 +376,6 @@ function ArkGridOptimizer(){
                   <input type="number" step="1" className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-gray-900/10 bg-white w-full lg:w-20" value={g.o2v} onChange={e=>updateGem(g.id,{o2v: Number(e.target.value)})} placeholder="0"/>
                 </div>
               </div>
-
               <div className="lg:static absolute top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
                 <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border-0 lg:border text-red-600 inline-flex items-center justify-center gap-2" onClick={()=>removeGem(g.id)} aria-label="젬 삭제"><Trash2 size={16}/><span className="hidden lg:inline"> 삭제</span></button>
               </div>
@@ -422,7 +384,6 @@ function ArkGridOptimizer(){
           {gems.length===0 && <div className="text-sm text-gray-600 p-2">젬을 추가하세요. (코어당 최대 4개가 배정됩니다)</div>}
         </div>
       </section>
-
       {/* 가중치 설정 */}
       <section className={`${card} p-4 lg:p-6`}>
         <div className="flex items-center gap-2 lg:gap-3">
@@ -447,7 +408,6 @@ function ArkGridOptimizer(){
           </div>
         </div>
       </section>
-
       {/* 결과 */}
       <section className={`${card} p-4 lg:p-6`}>
         <h2 className={sectionTitle}>결과</h2>
@@ -472,7 +432,6 @@ function ArkGridOptimizer(){
                     </div>
                   )}
                 </div>
-
                 {!hasResult ? (
                   <div className="text-sm text-gray-600 mt-2">
                     결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 구간 강제 조건을 만족하지 못함{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
@@ -542,10 +501,8 @@ function ArkGridOptimizer(){
           })}
         </div>
       </section>
-
       <ToastStack toasts={toasts} onClose={remove}/>
     </div>
   );
 }
-
 export default CORE_SUPPLY;

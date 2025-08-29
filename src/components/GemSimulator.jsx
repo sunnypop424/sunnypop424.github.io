@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp, Undo2, Redo2 } from "lucide-react";
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
-
 /* =========================
    결정적 RNG 유틸리티 (원본 유지)
    ========================= */
@@ -31,7 +30,6 @@ function makeRNG(seed) {
     return (s >>> 0) / 4294967296;
   };
 }
-
 /* =========================
    등급/젬타입/상수 (원본 유지)
    ========================= */
@@ -56,7 +54,6 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const fmtProb = (p) => ((Math.max(0, Math.min(1, isNaN(p) ? 0 : p)) * 100).toFixed(5) + "%");
 const fmtNum = (n) => n.toLocaleString();
 const OFFICIAL_RNG = true;
-
 /* ===== 시뮬레이션 횟수 옵션/헬퍼 ===== */
 const SIM_OPTIONS = [
   { value: 1000, label: "1,000회 (빠름)" },
@@ -64,7 +61,6 @@ const SIM_OPTIONS = [
   { value: 10000, label: "10,000회 (추천)" },
   { value: 50000, label: "50,000회 (정밀)" },
 ];
-
 // 반복 수에 따른 수렴 기준(95% CI 반폭)과 배치 크기
 const epsilonByTrials = (n) => {
   if (n >= 50000) return 0.002;   // ±0.2%p
@@ -78,9 +74,6 @@ const batchByTrials = (n) => {
   if (n >= 5000) return 600;
   return 400;
 };
-
-
-
 /* =========================
    효과명/포지션/스코어/목표 (원본 유지)
    ========================= */
@@ -110,7 +103,6 @@ function meetsTargetByMode(pos, abMode, s, t, gemKey, tgtNames) {
   const match = (lineName, lineLvl, targetName, lvlReq) =>
     isAny(targetName) ? (pool.includes(lineName) && lineLvl >= lvlReq)
       : (lineName === targetName && lineLvl >= lvlReq);
-
   if (abMode === "ANY_ONE") {
     // 한 개 목표만 의미: (A 라인 or B 라인)가 "목표 이름 A" + 레벨≥t.aLvl
     const okA = TA && (match(s.aName, s.aLvl, TA, t.aLvl) || match(s.bName, s.bLvl, TA, t.aLvl));
@@ -139,7 +131,6 @@ function needDistanceByMode(pos, abMode, s, t, gemKey, tgtNames) {
     }
     return (curName === targetName ? 0 : 1) + Math.max(0, targetLvl - curLvl);
   };
-
   if (abMode === "ANY_ONE") {
     if (!TA) return Number.POSITIVE_INFINITY;
     // A라인을 TA로 맞추기 vs B라인을 TA로 맞추기
@@ -155,7 +146,6 @@ function needDistanceByMode(pos, abMode, s, t, gemKey, tgtNames) {
   }
   return sum;
 }
-
 /* =========================
    가중치/라벨/슬롯/적용 (원본 유지)
    ========================= */
@@ -168,31 +158,26 @@ function buildWeightedItems(state, attemptsLeft, pos, gemKey, costAddRate) {
   if (s.eff <= 2) items.push({ slot: { kind: "EFF", delta: 3 }, w: 1.75 });
   if (s.eff <= 1) items.push({ slot: { kind: "EFF", delta: 4 }, w: 0.45 });
   if (minusAppears_TABLE(s.eff)) items.push({ slot: { kind: "EFF", delta: -1 }, w: 3.0 });
-
   if (s.pts < 5) items.push({ slot: { kind: "PTS", delta: 1 }, w: 11.65 });
   if (s.pts <= 3) items.push({ slot: { kind: "PTS", delta: 2 }, w: 4.4 });
   if (s.pts <= 2) items.push({ slot: { kind: "PTS", delta: 3 }, w: 1.75 });
   if (s.pts <= 1) items.push({ slot: { kind: "PTS", delta: 4 }, w: 0.45 });
   if (minusAppears_TABLE(s.pts)) items.push({ slot: { kind: "PTS", delta: -1 }, w: 3.0 });
-
   if (s.aLvl < 5) items.push({ slot: { kind: "A_LVL", delta: 1 }, w: 11.65 });
   if (s.aLvl <= 3) items.push({ slot: { kind: "A_LVL", delta: 2 }, w: 4.4 });
   if (s.aLvl <= 2) items.push({ slot: { kind: "A_LVL", delta: 3 }, w: 1.75 });
   if (s.aLvl <= 1) items.push({ slot: { kind: "A_LVL", delta: 4 }, w: 0.45 });
   if (minusAppears_TABLE(s.aLvl)) items.push({ slot: { kind: "A_LVL", delta: -1 }, w: 3.0 });
-
   if (s.bLvl < 5) items.push({ slot: { kind: "B_LVL", delta: 1 }, w: 11.65 });
   if (s.bLvl <= 3) items.push({ slot: { kind: "B_LVL", delta: 2 }, w: 4.4 });
   if (s.bLvl <= 2) items.push({ slot: { kind: "B_LVL", delta: 3 }, w: 1.75 });
   if (s.bLvl <= 1) items.push({ slot: { kind: "B_LVL", delta: 4 }, w: 0.45 });
   if (minusAppears_TABLE(s.bLvl)) items.push({ slot: { kind: "B_LVL", delta: -1 }, w: 3.0 });
-
   const names = allowedEffectNames(gemKey, "상관 없음"); // 역할군 풀을 쓰려면 pos, 전체풀 쓰려면 "상관 없음"
   const canAChange = names.filter((n) => n !== s.bName && n !== s.aName).length > 0;
   const canBChange = names.filter((n) => n !== s.aName && n !== s.bName).length > 0;
   if (canAChange) items.push({ slot: { kind: "A_CHANGE" }, w: 3.25 });
   if (canBChange) items.push({ slot: { kind: "B_CHANGE" }, w: 3.25 });
-
   if (attemptsLeft > 1) {
     if (costAddRate !== 1) items.push({ slot: { kind: "COST", mod: 1 }, w: 1.75 });
     if (costAddRate !== -1) items.push({ slot: { kind: "COST", mod: -1 }, w: 1.75 });
@@ -230,7 +215,6 @@ function labelToSlot(label, s) {
 }
 function applySlot(gemKey, pos, s, slot, costAddRate, rngFn) {
   const rng = typeof rngFn === "function" ? rngFn : Math.random;
-
   let next = { ...s };
   const goldThisAttempt = GOLD_PER_ATTEMPT * (costAddRate === -1 ? 0 : costAddRate === 1 ? 2 : 1);
   let nextRate = 0;
@@ -264,7 +248,6 @@ function applySlot(gemKey, pos, s, slot, costAddRate, rngFn) {
   }
   return { next, goldThisAttempt, nextRate, rerollDelta };
 }
-
 /* =========================
    시뮬레이션 (원본 유지)
    ========================= */
@@ -286,7 +269,6 @@ function evaluateFromSimulation(
   };
   const desirability = (s) => needDistanceByMode(pos, abMode, s, target, gemKey, tgtNames);
   let agg = { ...ZERO_VALUE, trialsUsed: 0, ci: { low: 0, high: 0, halfWidth: 0 } };
-
   const simOnce = () => {
     let s = { ...start };
     let left = attemptsLeft;
@@ -295,7 +277,6 @@ function evaluateFromSimulation(
     let rate = costAddRate;
     let goldSum = 0;
     let first = true;
-
     // ✅ 이미 목표를 만족한 상태라면(달성 즉시 가공 완료 정책) 바로 성공 처리
     if (policy === "STOP_ON_SUCCESS" &&
       meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) {
@@ -309,7 +290,6 @@ function evaluateFromSimulation(
         expectedGold: 0, // 시도 안 했으니 비용 0
       };
     }
-
     while (left > 0) {
       let cand = [];
       if (first && selectedFirstFour.length > 0) {
@@ -325,7 +305,6 @@ function evaluateFromSimulation(
           temp.splice(idx, 1);
         }
       }
-
       // 공식 모드: cand 중 1개 균등 무작위(각 25%). 효과 변경은 applySlot 내부에서 무작위.
       if (OFFICIAL_RNG) {
         const pick = cand[Math.floor(rand() * cand.length)];
@@ -352,11 +331,9 @@ function evaluateFromSimulation(
         if (best && best.gain <= 0 && unlocked && rrs > 0) { rrs -= 1; first = false; continue; }
         if (best) { s = best.next; goldSum += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
       }
-
       left -= 1; first = false;
       if (policy === "STOP_ON_SUCCESS" && meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) break;
     }
-
     const score = totalScore(s);
     const g = gradeOf(score);
     return {
@@ -367,7 +344,6 @@ function evaluateFromSimulation(
       expectedGold: goldSum,
     };
   };
-
   let n = 0;
   let succSum = 0, legendSum = 0, relicSum = 0, ancientSum = 0, goldSum = 0;
   // gold의 표준오차도 보여주고 싶다면 분산추정 추가(선택)
@@ -382,16 +358,13 @@ function evaluateFromSimulation(
       goldSum += one.expectedGold;
     }
     n += until;
-
     // 95% 신뢰구간 (정규 근사): p ± 1.96*sqrt(p(1-p)/n)
     const p = succSum / n;
     const se = Math.sqrt(Math.max(p * (1 - p), 0) / Math.max(n, 1));
     const hw = 1.96 * se;
     agg.ci = { low: Math.max(0, p - hw), high: Math.min(1, p + hw), halfWidth: hw };
-
     if (hw <= epsilon) break; // 충분히 수렴하면 종료
   }
-
   agg.trialsUsed = n;
   agg.successProb = succSum / n;
   agg.legendProb = legendSum / n;
@@ -400,7 +373,6 @@ function evaluateFromSimulation(
   agg.expectedGold = goldSum / n;
   return agg;
 }
-
 /* ===============================
    공통 UI(LoACore 스타일): Dropdown + Toast + NumberInput
    =============================== */
@@ -417,21 +389,18 @@ function useOnClickOutside(refs, handler) {
     return () => document.removeEventListener('click', listener, true);
   }, [refsArray]);
 }
-
 function Dropdown({ value, items, onChange, placeholder, className, disabled }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   const menuPos = useRef({ top: 0, left: 0, width: 0 });
   const [, forceTick] = useState(0);
-
   useEffect(() => {
     const h = () => setOpen(false);
     window.addEventListener('close-all-dropdowns', h);
     return () => window.removeEventListener('close-all-dropdowns', h);
   }, []);
   useOnClickOutside([btnRef, menuRef], () => setOpen(false));
-
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
@@ -446,7 +415,6 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
     window.addEventListener("resize", onScroll);
     return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
   }, [open]);
-
   const selected = items.find((i) => i.value === value);
   const menu = open && !disabled ? (
     <AnimatePresence>
@@ -475,7 +443,6 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
       </motion.ul>
     </AnimatePresence>
   ) : null;
-
   return (
     <div ref={btnRef} className={`relative min-w-0 ${className || ""}`}>
       <button
@@ -491,7 +458,6 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
     </div>
   );
 }
-
 function useToasts() {
   const [toasts, setToasts] = useState([]);
   const push = (msg, tone = "info") => {
@@ -515,7 +481,6 @@ function ToastStack({ toasts, onClose }) {
     warning: "text-amber-900/80 hover:text-amber-900",
     error: "text-rose-900/80 hover:text-rose-900",
   }[tone] || "text-amber-900/80 hover:text-amber-900");
-
   return (
     <div className="fixed inset-0 z-[9999] flex space-y-2 flex-col items-center justify-center pointer-events-none px-4">
       <AnimatePresence>
@@ -542,7 +507,6 @@ function ToastStack({ toasts, onClose }) {
     </div>
   );
 }
-
 function NumberInput({
   value,
   set,                 // (old) (number)=>void
@@ -559,14 +523,12 @@ function NumberInput({
   const toStr = (v) => (v === null || v === undefined ? "" : String(v));
   const [inner, setInner] = React.useState(toStr(value));
   React.useEffect(() => { setInner(toStr(value)); }, [value]);
-
   const clampLocal = (n) => {
     let x = n;
     if (min != null && x < min) x = min;
     if (max != null && x > max) x = max;
     return x;
   };
-
   const normalizeOnBlur = (s) => {
     if (s === "") return zeroOnBlur ? (min ?? 0) : null;
     let n = Number(s);
@@ -574,14 +536,11 @@ function NumberInput({
     n = allowFloat ? n : Math.trunc(n);
     return clampLocal(n);
   };
-
   // wheel 값 변동 방지(의도치 않은 증가/감소)
   const handleWheel = (e) => e.currentTarget.blur();
-
   // 구버전/신버전 핸들러 분기
   const hasNewApi = typeof onChange === "function";
   const callOld = typeof set === "function";
-
   return (
     <input
       type="number"
@@ -593,7 +552,6 @@ function NumberInput({
       value={inner}
       onChange={(e) => {
         const v = e.target.value;
-
         // 입력 중 빈 문자열 허용
         if (v === "") {
           setInner("");
@@ -601,17 +559,13 @@ function NumberInput({
           // 구버전(set)은 입력 중 null을 전달하지 않음 (기존 동작 유지)
           return;
         }
-
         setInner(v);
-
         const num = Number(v);
         if (!Number.isFinite(num)) {
           if (hasNewApi) onChange(null);
           return;
         }
-
         const n = allowFloat ? num : Math.trunc(num);
-
         if (hasNewApi) {
           // 새 API: 입력 중에도 값 알림(클램프는 blur 시 확정)
           onChange(n);
@@ -623,7 +577,6 @@ function NumberInput({
       onBlur={() => {
         const n = normalizeOnBlur(inner);
         setInner(n == null ? "" : String(n));
-
         if (hasNewApi) {
           onChange(n);
         } else if (callOld) {
@@ -637,8 +590,6 @@ function NumberInput({
     />
   );
 }
-
-
 /* ===============================
    원래 Select API를 유지하면서 내부는 Dropdown 사용
    =============================== */
@@ -659,7 +610,6 @@ const Select = ({ value, set, options, disabled, placeholder }) => {
     />
   );
 };
-
 /* =========================
    중복 라벨 검출 (원본 유지)
    ========================= */
@@ -667,21 +617,17 @@ function hasDuplicateLabels(labels) {
   const arr = labels.filter(Boolean);
   return new Set(arr).size !== arr.length;
 }
-
 /* =========================
    메인 컴포넌트
    ========================= */
 export default function GemSimulator() {
   const { toasts, push, remove } = useToasts();
-
   const [gemKey, setGemKey] = useState("질서-안정");
   const [pos, setPos] = useState("상관 없음");
   const [rarity, setRarity] = useState("고급");
   const [abModePrimary, setAbModePrimary] = useState("ANY_ONE");
-
   const effectPoolAny = useMemo(() => allowedEffectNames(gemKey, "상관 없음"), [gemKey]);
   const effectPoolByPos = useMemo(() => allowedEffectNames(gemKey, "상관 없음"), [gemKey]);
-
   const [cur, setCur] = useState({ eff: MIN_STAT, pts: MIN_STAT, aName: effectPoolAny[0], aLvl: MIN_STAT, bName: effectPoolAny[1] || effectPoolAny[0], bLvl: MIN_STAT });
   const [tgt, setTgt] = useState({ eff: MIN_STAT, pts: MIN_STAT, aLvl: MIN_STAT, bLvl: MIN_STAT });
   const [tgtNames, setTgtNames] = useState({
@@ -691,18 +637,14 @@ export default function GemSimulator() {
   const [basicLocked, setBasicLocked] = useState(false);
   const [curLocked, setCurLocked] = useState(false);
   const [tgtLocked, setTgtLocked] = useState(false);
-
   // 시작 상태가 포지션 풀과 안 맞아도 계산은 진행 (이름 변경으로 충족 가능)
   const curValid = cur.aName !== cur.bName;
   // 시뮬레이션 반복 수 (Monte Carlo maxTrials)
   const [simTrials, setSimTrials] = useState(10000);
-
-
   const migratedRef = useRef(false); // StrictMode 중복 실행 방지(개발모드)
   useEffect(() => {
     if (migratedRef.current) return;
     migratedRef.current = true;
-
     setCur(s => ({
       ...s,
       eff: Math.max(s.eff, MIN_STAT),
@@ -718,8 +660,6 @@ export default function GemSimulator() {
       bLvl: Math.max(t.bLvl, MIN_STAT),
     }));
   }, []);
-
-
   const [manual, setManual] = useState(() => ({
     attemptsLeft: RARITY_ATTEMPTS[rarity],
     rerolls: RARITY_BASE_REROLLS[rarity],
@@ -739,28 +679,22 @@ export default function GemSimulator() {
       gold: 0,
     }));
   }, [rarity, cur]);
-
-
   const [changeMode, setChangeMode] = useState(null); // { who: 'A'|'B', options: string[] }
   const [changePick, setChangePick] = useState("");
-
   // ==== Undo/Redo 히스토리 ====
   const HISTORY_LIMIT = 50;
   const [history, setHistory] = useState({ past: [], future: [] });
-
   // manual, changeMode, changePick 을 하나의 스냅샷으로 관리
   const takeSnapshot = useCallback(() => ({
     manual: JSON.parse(JSON.stringify(manual)),
     changeMode: changeMode ? { ...changeMode, options: [...changeMode.options] } : null,
     changePick
   }), [manual, changeMode, changePick]);
-
   const restoreSnapshot = useCallback((snap) => {
     setManual(snap.manual);
     setChangeMode(snap.changeMode);
     setChangePick(snap.changePick);
   }, []);
-
   const pushHistory = useCallback(() => {
     setHistory(h => {
       const nextPast = [...h.past, takeSnapshot()];
@@ -769,21 +703,16 @@ export default function GemSimulator() {
       return { past: nextPast, future: [] };
     });
   }, [takeSnapshot]);
-
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
-
-
   // ==== 작업 내역(Log) ====
   const LOG_LIMIT = 200;
   const [logs, setLogs] = useState([]); // 최신이 위로 오게 저장
-
   const nowStr = () => {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   };
-
   const addLog = useCallback((entry) => {
     // entry: { type, title, detail?, meta? }
     setLogs((prev) => [
@@ -791,9 +720,6 @@ export default function GemSimulator() {
       ...prev
     ].slice(0, LOG_LIMIT));
   }, []);
-
-
-
   const undo = useCallback(() => {
     setHistory(h => {
       if (h.past.length === 0) return h;
@@ -806,7 +732,6 @@ export default function GemSimulator() {
       return { past: newPast, future: [current, ...h.future] };
     });
   }, [restoreSnapshot, takeSnapshot, addLog]);
-
   const redo = useCallback(() => {
     setHistory(h => {
       if (h.future.length === 0) return h;
@@ -819,7 +744,6 @@ export default function GemSimulator() {
       return { past: [...h.past, current], future: restFuture };
     });
   }, [restoreSnapshot, takeSnapshot, addLog]);
-
   // ⌨️ 단축키: Ctrl/Cmd+Z = Undo, Ctrl/Cmd+Shift+Z = Redo
   useEffect(() => {
     const onKey = (e) => {
@@ -834,8 +758,6 @@ export default function GemSimulator() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [canUndo, canRedo, undo, redo]);
-
-
   // 상태 비교해서 읽기 쉬운 diff 문자열 만들어주기
   const diffStats = (before, after) => {
     const parts = [];
@@ -854,8 +776,6 @@ export default function GemSimulator() {
     }
     return parts.join(' · ');
   };
-
-
   // 포지션/젬타입 바뀔 때 목표 이름을 유효풀로 보정
   useEffect(() => {
     const pool = allowedEffectNames(gemKey, pos);
@@ -866,13 +786,11 @@ export default function GemSimulator() {
       return { aName: a, bName: b };
     });
   }, [gemKey, pos]);
-
   const allOptionLabels = useMemo(() => {
     const items = buildWeightedItems(manual.state, manual.attemptsLeft, pos, gemKey, manual.costAddRate);
     const labels = items.map((it) => slotToPrettyLabel(it.slot, manual.state));
     return Array.from(new Set(labels));
   }, [manual.state, manual.attemptsLeft, manual.costAddRate, pos, gemKey]);
-
   const defaultLabels = useMemo(() => {
     const want = [`의지력 효율 +1`, `포인트 +1`, `${manual.state.aName} Lv. +1`, `${manual.state.bName} Lv. +1`];
     const out = [];
@@ -891,7 +809,6 @@ export default function GemSimulator() {
     }
     return out.slice(0, 4);
   }, [allOptionLabels, manual.state.aName, manual.state.bName]);
-
   const [manLabels, setManLabels] = useState(defaultLabels);
   useEffect(() => {
     setManLabels((prev) => {
@@ -905,13 +822,11 @@ export default function GemSimulator() {
       return next;
     });
   }, [allOptionLabels]);
-
   const [resultStop, setResultStop] = useState(null);
   const [resultRun, setResultRun] = useState(null);
   const [isComputing, setIsComputing] = useState(false);
   const tokenRef = useRef(0);
   const timerRef = useRef(null);
-
   // 높이 동기화 refs & 상태
   const simRef = useRef(null);       // 왼쪽(가공 시뮬레이션) 카드
   const [logsMax, setLogsMax] = useState(null); // 오른쪽 카드 max-height(px)
@@ -926,7 +841,6 @@ export default function GemSimulator() {
     return () => window.removeEventListener('resize', recalc);
     // 왼쪽 카드 높이에 영향을 주는 값들이 갱신되면 다시 계산
   }, [manual, manLabels, resultRun, resultStop, changeMode, tgtLocked, basicLocked, curLocked]);
-
   /* 다른 항목 보기 EV (원본 유지) */
   const REROLL_SAMPLES = 16;
   const TAU = 0.0025;
@@ -979,17 +893,13 @@ export default function GemSimulator() {
     return out;
   }
   function slotsToLabels(slots, s) { return slots.map((sl) => slotToPrettyLabel(sl, s)); }
-
   const rerollAdvice = useMemo(() => {
     if (!manual.unlocked) return { shouldReroll: false, reason: "첫 가공 이전에는 다른 항목 보기를 추천을 하지 않습니다." };
     if (manual.rerolls <= 0) return { shouldReroll: false, reason: "다른 항목 보기가 없습니다." };
     if (manual.attemptsLeft <= 0) return { shouldReroll: false, reason: "가공이 완료되어 다른 항목 보기 판단이 무의미합니다." };
-
     const abForEval = pos === "상관 없음" ? "ANY_ONE" : abModePrimary;
     const seedBase = makeDeterministicSeed({ gemKey, pos, rarity, manual, tgt, manLabels, abForEval, salt: "REROLL_EV" });
-
     const nowProb = expectedSuccessProbForLabels(manLabels, gemKey, pos, abForEval, manual, tgt, seedBase + 7);
-
     let acc = 0;
     for (let i = 0; i < REROLL_SAMPLES; i++) {
       const seed = seedBase + 1000 + i * 31;
@@ -1002,7 +912,6 @@ export default function GemSimulator() {
     const rerollProb = acc / REROLL_SAMPLES;
     const delta = rerollProb - nowProb;
     const pct = (x) => (x * 100).toFixed(2) + "%";
-
     if (delta > TAU) {
       return { shouldReroll: true, reason: `룩어헤드 기준 다른 항목 보기 추천: 현재 최선 ${pct(nowProb)} → 다른 항목 보기 기대 ${pct(rerollProb)} (▲${pct(delta)}).` };
     } else if (delta < -TAU) {
@@ -1011,8 +920,6 @@ export default function GemSimulator() {
       return { shouldReroll: false, reason: `두 경로 차이 미미: 현재 ${pct(nowProb)} vs 다른 항목 보기 ${pct(rerollProb)} (|Δ| < ${(TAU * 100).toFixed(2)}%).` };
     }
   }, [gemKey, pos, rarity, manual, tgt, manLabels, abModePrimary, expectedSuccessProbForLabels]);
-
-
   // BOTH로 전환 시, 목표 이름에 '상관없음'이 포함되어 있으면 유효한 이름으로 자동 보정
   useEffect(() => {
     if (abModePrimary !== "BOTH" || pos === "상관 없음") return;
@@ -1024,7 +931,6 @@ export default function GemSimulator() {
       return { aName: a, bName: b };
     });
   }, [abModePrimary, gemKey, pos]);
-
   /* 확률 계산 트리거 */
   useEffect(() => {
     if (!tgtLocked || !curValid) { setResultStop(null); setResultRun(null); return; }
@@ -1032,12 +938,10 @@ export default function GemSimulator() {
       setResultStop(null); setResultRun(null);
       return;
     }
-
     const selectedFirstFour = manLabels.map((lb) => labelToSlot(lb, manual.state)).filter((x) => !!x);
     const calcMode = pos === "상관 없음" ? "IGNORE_AB" : abModePrimary;
     const abForEval = pos === "상관 없음" ? "ANY_ONE" : abModePrimary;
     const seedBase = makeDeterministicSeed({ gemKey, pos, rarity, manual, tgt, selectedFirstFour, calcMode });
-
     const token = ++tokenRef.current;
     setIsComputing(true);
     // 이전 예약 취소
@@ -1062,11 +966,7 @@ export default function GemSimulator() {
         timerRef.current = null;
       }
     };
-
   }, [gemKey, pos, rarity, curValid, manual, tgt, tgtLocked, manLabels, abModePrimary, tgtNames, simTrials]);
-
-
-
   /* 사용자 액션: 토스트로 안내 */
   function applyManual(slotIdx) {
     if (!allLocked) { push("항목을 적용하려면 '기본 설정/현재 옵션/목표 옵션'을 모두 저장(잠금)하세요.", "warning"); return; }
@@ -1074,7 +974,6 @@ export default function GemSimulator() {
     if (!tgtLocked) { push("목표 옵션을 먼저 저장해 주세요."); return; }
     if (manual.attemptsLeft <= 0) return;
     if (hasDuplicateLabels(manLabels)) { push("중복된 항목이 있습니다. 확인해주세요."); return; }
-
     const label = manLabels[slotIdx];
     if (!allOptionLabels.includes(label)) { push("미등장 조건으로 현재 선택은 사용할 수 없어요."); return; }
     const action = labelToSlot(label, manual.state);
@@ -1132,8 +1031,6 @@ export default function GemSimulator() {
     setHistory({ past: [], future: [] }); // 히스토리도 같이 초기화하면 깔끔
     setManual({ attemptsLeft: RARITY_ATTEMPTS[rarity], rerolls: RARITY_BASE_REROLLS[rarity], unlocked: false, costAddRate: 0, gold: 0, state: { ...cur } });
   }
-
-
   function confirmEffectChange() {
     if (!changeMode) return;
     if (!allLocked) { push("효과 변경 확정은 모든 설정이 잠금된 상태에서만 가능합니다.", "warning"); return; }
@@ -1164,18 +1061,15 @@ export default function GemSimulator() {
     setChangeMode(null);
     push("선택한 효과로 변경되었습니다.", "success");
   }
-
   function cancelEffectChange() {
     setChangeMode(null);
     push("효과 변경을 취소했습니다.", "warning");
   }
-
   /* ====== UI 토큰 ====== */
   useEffect(() => { document.title = "로아 아크그리드 젬 가공 헬퍼"; }, []);
   const card = "bg-white rounded-2xl shadow-sm p-4 lg:p-6";
   const labelCls = "block text-xs text-gray-500 mb-1";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
-
   const calcMode = pos === "상관 없음" ? "IGNORE_AB" : abModePrimary;
   const tgtALabel = `목표 효과 A 레벨 ≥`;
   const tgtBLabel = `목표 효과 B 레벨 ≥`;
@@ -1183,18 +1077,13 @@ export default function GemSimulator() {
   const allLocked = basicLocked && curLocked && tgtLocked;
   const hasDup = hasDuplicateLabels(manLabels);
   const showEffectsUI = true;
-
   const showSkeleton = useMemo(
     () => curValid && (isComputing || !(resultRun && resultStop)),
     [curValid, isComputing, resultRun, resultStop]
   );
-
   const actionDisabled = !allLocked || hasDup || !!changeMode || manual.attemptsLeft <= 0;
   const rerollDisabled = !allLocked || !!changeMode || manual.attemptsLeft <= 0 || manual.rerolls <= 0;
-
-
   const dupWarnShown = useRef(false);
-
   // allLocked이 false로 변하면 logs 초기화
   useEffect(() => {
     if (!allLocked) {
@@ -1202,7 +1091,6 @@ export default function GemSimulator() {
       setHistory({ past: [], future: [] }); // 히스토리도 같이 초기화하면 깔끔
     }
   }, [allLocked]);
-
   useEffect(() => {
     if (hasDup) {
       if (!dupWarnShown.current) {
@@ -1213,14 +1101,11 @@ export default function GemSimulator() {
       dupWarnShown.current = false;
     }
   }, [hasDup, push]);
-
-
   const targetPool = useMemo(() => {
     const base = allowedEffectNames(gemKey, pos);
     if (pos === "상관 없음") return base;
     return abModePrimary === "ANY_ONE" ? ["상관없음", ...base] : base; // BOTH면 '상관없음' 제외
   }, [gemKey, pos, abModePrimary]);
-
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{ backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)", backgroundAttachment: "fixed" }}>
       <style>{`
@@ -1228,7 +1113,6 @@ export default function GemSimulator() {
         .text-primary{ color:#a399f2; }
         .accent-primary{ accent-color:#a399f2; }
       `}</style>
-
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1248,13 +1132,11 @@ export default function GemSimulator() {
             </div>
           </div>
         </section>
-
         {/* 1) 기본 설정 */}
         {/* 1) 기본 설정 */}
         <section className={`${card} !mt-2`}>
           <div className="flex items-center gap-2">
             <h2 className={sectionTitle}>기본 설정</h2>
-
             {/* 타이틀 우측: 저장/편집 버튼 (LoACoreOptimizer 스타일) */}
             <div className="ml-auto flex items-center gap-2">
               {basicLocked ? (
@@ -1281,7 +1163,6 @@ export default function GemSimulator() {
               )}
             </div>
           </div>
-
           {/* 코어 카드와 동일한 레이아웃/간격/높이 */}
           <div className="mt-3">
 <div
@@ -1305,7 +1186,6 @@ export default function GemSimulator() {
       disabled={basicLocked}
     />
   </div>
-
   {/* 등급 */}
   <div className={`flex flex-col w-full lg:w-[120px] w-full lg:w-40 ${basicLocked ? "opacity-50" : ""}`}>
     <label className={labelCls}>등급</label>
@@ -1318,7 +1198,6 @@ export default function GemSimulator() {
       disabled={basicLocked}
     />
   </div>
-
   {/* 가공/다른 항목 보기 */}
   <div className="flex flex-col w-full col-span-2 lg:col-span-1 lg:w-auto">
     <label className={labelCls}>기본 시도/다른 항목 보기</label>
@@ -1328,11 +1207,8 @@ export default function GemSimulator() {
     </div>
   </div>
 </div>
-
           </div>
         </section>
-
-
         {/* 2) 현재 옵션 */}
         <section className={card}>
           <div className="flex items-center gap-2">
@@ -1364,7 +1240,6 @@ export default function GemSimulator() {
               )}
             </div>
           </div>
-
           {/* 2) 현재 옵션 설정 — 입력 블록 교체(간격/폭 기본설정 카드와 동일) */}
           <div className="mt-3">
             <div className="
@@ -1385,7 +1260,6 @@ export default function GemSimulator() {
                   disabled={curLocked}
                 />
               </div>
-
               {/* 포인트 */}
               <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>포인트</label>
@@ -1397,7 +1271,6 @@ export default function GemSimulator() {
                   disabled={curLocked}
                 />
               </div>
-
               {/* 효과 A */}
               <div className={`flex flex-col w-full lg:w-[160px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>효과 A</label>
@@ -1409,7 +1282,6 @@ export default function GemSimulator() {
                   placeholder={curLocked ? "비활성화" : undefined}
                 />
               </div>
-
               {/* A 레벨 */}
               <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>효과 A 레벨</label>
@@ -1421,7 +1293,6 @@ export default function GemSimulator() {
                   disabled={curLocked}
                 />
               </div>
-
               {/* 효과 B */}
               <div className={`flex flex-col w-full lg:w-[160px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>효과 B</label>
@@ -1433,7 +1304,6 @@ export default function GemSimulator() {
                   placeholder={curLocked ? "비활성화" : undefined}
                 />
               </div>
-
               {/* B 레벨 */}
               <div className={`flex flex-col w-full lg:w-[120px] ${curLocked ? "opacity-50" : ""}`}>
                 <label className={labelCls}>효과 B 레벨</label>
@@ -1446,22 +1316,14 @@ export default function GemSimulator() {
                 />
               </div>
             </div>
-
           </div>
-
-
         </section>
-
-
         {/* 3) 목표 옵션 설정 — 입력 블록 교체(간격/폭 LoACore와 동일) */}
         <section className={card}>
           <div className="flex items-center gap-2">
             <h2 className={sectionTitle}>목표 옵션 설정</h2>
-
             {/* ⬇️ 헤더 우측: '목표 충족 방식'을 저장/편집 버튼 왼쪽에 배치 */}
             <div className="ml-auto flex items-center gap-3 flex-wrap">
-
-
               {/* 저장/편집 토글 버튼 (그대로) */}
               {tgtLocked ? (
                 <>
@@ -1487,8 +1349,6 @@ export default function GemSimulator() {
               )}
             </div>
           </div>
-
-
           <div className={`mb-1 flex items-center gap-4 text-sm ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
             <span className="text-xs text-gray-500">목표 충족 방식</span>
             <label className="inline-flex items-center gap-2">
@@ -1512,7 +1372,6 @@ export default function GemSimulator() {
               2개
             </label>
           </div>
-
           {/* LoACore 코어행과 동일한 한 줄 카드 레이아웃 */}
           <div className="mt-3">
 <div className="
@@ -1533,7 +1392,6 @@ export default function GemSimulator() {
       disabled={tgtLocked}
     />
   </div>
-
   {/* 포인트 ≥ */}
   <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
     <label className={labelCls}>포인트 ≥</label>
@@ -1545,7 +1403,6 @@ export default function GemSimulator() {
       disabled={tgtLocked}
     />
   </div>
-
   {/* 추가 효과 — 모바일에서 col-span-2 */}
   <div className={`flex flex-col w-full col-span-2 lg:col-span-1 lg:w-[100px] ${tgtLocked ? "opacity-50" : ""}`}>
     <label className={labelCls}>추가 효과</label>
@@ -1558,7 +1415,6 @@ export default function GemSimulator() {
       disabled={tgtLocked}
     />
   </div>
-
   {(() => {
     const effectsDisabled = tgtLocked || pos === "상관 없음";
     const bLevelDisabled = effectsDisabled || abModePrimary !== "BOTH";
@@ -1578,7 +1434,6 @@ export default function GemSimulator() {
             disabled={tgtLocked || pos === "상관 없음"}
           />
         </div>
-
         {/* A 레벨 ≥ */}
         <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effCls}`}>
           <label className={labelCls}>{tgtALabel}</label>
@@ -1590,7 +1445,6 @@ export default function GemSimulator() {
             disabled={effectsDisabled}
           />
         </div>
-
         {/* 목표 이름 B (BOTH일 때만 활성) */}
         <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
           <label className={labelCls}>목표 효과 B</label>
@@ -1603,7 +1457,6 @@ export default function GemSimulator() {
             disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
           />
         </div>
-
         {/* B 레벨 ≥ */}
         <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effClsB}`}>
           <label className={labelCls}>{tgtBLabel}</label>
@@ -1619,11 +1472,8 @@ export default function GemSimulator() {
     );
   })()}
 </div>
-
           </div>
         </section>
-
-
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* 4) 가공 시뮬레이션 */}
           <section ref={simRef} className={`lg:col-span-2 ` + card}>
@@ -1640,17 +1490,14 @@ export default function GemSimulator() {
                 </button>
               </div>
             </div>
-
             {/* 🔹 안내문 추가 */}
             <div className="mt-1 text-xs text-gray-500">
               항목 적용 / 다른 항목 보기는 <b>모든 설정을 저장(잠금)</b>한 뒤 이용하세요.
             </div>
-
             <div className="mt-3 gap-4">
               {/* 왼쪽: 상태/리소스(가독성 업) */}
               <div className="rounded-xl border p-3 bg-white">
                 <div className="text-sm font-semibold mb-2">현재 젬 상태</div>
-
                 {/* 작은 스탯 카드 4그리드 */}
                 <div className="grid grid-cols-4 gap-2 text-sm">
                   <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
@@ -1661,7 +1508,6 @@ export default function GemSimulator() {
                     <div className="text-xs text-gray-500">질서·혼돈 포인트</div>
                     <div className="text-lg font-semibold">{manual.state.pts}</div>
                   </div>
-
                   {showEffectsUI && (
                     <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
                       {changeMode?.who === "A" ? (
@@ -1692,7 +1538,6 @@ export default function GemSimulator() {
                       )}
                     </div>
                   )}
-
                   {showEffectsUI && (
                     <div className="rounded-xl border p-2 text-center flex flex-col items-center justify-center col-span-2">
                       {changeMode?.who === "B" ? (
@@ -1724,10 +1569,8 @@ export default function GemSimulator() {
                     </div>
                   )}
                 </div>
-
                 {/* 리소스 칩 */}
                 <div className="mt-3 flex flex-wrap gap-2 text-[12px] lg:text-[13px]">
-
                   {manual.attemptsLeft <= 0 ? (
                     <div className="inline-flex items-center px-2.5 py-1.5 rounded-xl bg-violet-50 border border-violet-200 text-violet-900 text-[12px] lg:text-[13px]">
                       가공이 완료되었습니다.
@@ -1745,18 +1588,14 @@ export default function GemSimulator() {
                       </div>
                     </div>
                   )}
-
                   <div className="px-2.5 py-1.5 rounded-xl bg-gray-100 border">
                     누적 골드 <b className="ml-1">{fmtNum(manual.gold)}</b> G
                   </div>
                 </div>
-
               </div>
-
               {/* 오른쪽: 선택지 + 액션 */}
               <div className="rounded-xl border p-3 bg-white mt-4">
                 <div className="text-sm font-semibold mb-2">이번에 등장한 4개 항목</div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {manLabels.map((label, idx) => (
                     <div key={idx} className="slot-card rounded-xl border p-2 transition-all">
@@ -1784,9 +1623,7 @@ export default function GemSimulator() {
                       </div>
                     </div>
                   ))}
-
                 </div>
-
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
                   <button onClick={doReroll} disabled={rerollDisabled}
                     className={`h-10 px-3 rounded-xl border ${rerollDisabled ? "opacity-50 cursor-not-allowed" : "bg-white hover:bg-gray-50"} inline-flex items-center gap-2`}>
@@ -1803,15 +1640,12 @@ export default function GemSimulator() {
                           : (rerollAdvice.shouldReroll ? "다른 항목 보기 추천" : "다른 항목 보기 비추천")}
                   </span>
                 </div>
-
                 {manual.unlocked && manual.rerolls > 0 && (
                   <div className="mt-2 text-xs text-gray-700">{rerollAdvice.reason}</div>
                 )}
               </div>
             </div>
           </section>
-
-
           {/* 6) 작업 내역 */}
           <section
             className={`${card} h-full flex flex-col`}
@@ -1820,7 +1654,6 @@ export default function GemSimulator() {
             <div className="flex items-center gap-2">
               <h2 className={sectionTitle}>작업 내역</h2>
               <div className="ml-auto flex items-center gap-2">
-
                 <button
                   onClick={undo}
                   disabled={!canUndo}
@@ -1839,7 +1672,6 @@ export default function GemSimulator() {
                 </button>
               </div>
             </div>
-
             {logs.length === 0 ? (
               <div className="mt-3 text-sm text-gray-500">기록이 없습니다.</div>
             ) : (
@@ -1880,7 +1712,6 @@ export default function GemSimulator() {
             )}
           </section>
         </div>
-
         {/* 5) 결과 출력 */}
         <section className={card}>
           <div className="flex items-center gap-2">
@@ -1894,7 +1725,6 @@ export default function GemSimulator() {
               </span>
             </div>
           </div>
-
           {/* ▷ 스켈레톤 전체 덮개: 계산 중/미준비 상태면 전체를 스켈레톤으로 */}
           {showSkeleton ? (
             <div className="mt-3 space-y-3">
@@ -1908,7 +1738,6 @@ export default function GemSimulator() {
                   />
                 ))}
               </div>
-
               {/* 카드 스켈레톤 (2장) */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-2">
                 {[0, 1].map((k) => (
@@ -1937,7 +1766,6 @@ export default function GemSimulator() {
                   ))}
                 </div>
               </div>
-
               {resultRun && resultStop && (
                 <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
                   {/* 목표 달성 확률 */}
@@ -1959,7 +1787,6 @@ export default function GemSimulator() {
                             : "추가 효과 역할군 옵션 2개 전부"}
                       </span>
                     </div>
-
                     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {/* STOP_ON_SUCCESS */}
                       <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
@@ -1979,7 +1806,6 @@ export default function GemSimulator() {
                           기대 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
                         </div>
                       </div>
-
                       {/* RUN_TO_END */}
                       <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
                         <div className="flex items-center justify-between">
@@ -2000,7 +1826,6 @@ export default function GemSimulator() {
                       </div>
                     </div>
                   </motion.div>
-
                   {/* 등급 확률 */}
                   <motion.div
                     initial={{ opacity: 0, y: 6 }}
@@ -2011,7 +1836,6 @@ export default function GemSimulator() {
                     <div className="text-sm font-semibold flex items-center gap-2">
                       등급 확률
                     </div>
-
                     <div className="mt-3 space-y-3 text-sm">
                       {/* 전설 */}
                       <div>
@@ -2028,7 +1852,6 @@ export default function GemSimulator() {
                           />
                         </div>
                       </div>
-
                       {/* 유물 */}
                       <div>
                         <div className="flex items-center justify-between">
@@ -2044,7 +1867,6 @@ export default function GemSimulator() {
                           />
                         </div>
                       </div>
-
                       {/* 고대 */}
                       <div>
                         <div className="flex items-center justify-between">
@@ -2067,15 +1889,8 @@ export default function GemSimulator() {
             </>
           )}
         </section>
-
-
-
-
       </div>
-
       <ToastStack toasts={toasts} onClose={remove} />
-
-
       <div className="mt-6">
         <KakaoAdfit />
       </div>

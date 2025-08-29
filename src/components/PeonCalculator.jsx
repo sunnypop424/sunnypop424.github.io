@@ -1,22 +1,17 @@
 import React, { useState } from 'react';
 import { LoaderCircle } from 'lucide-react'
-
 function calculatePeonCost(peonCount, crystalRate) {
     if (peonCount <= 0) return null;
-
     let best = null;
     const max100 = Math.ceil(peonCount / 100) + 1;
-
     for (let c100 = 0; c100 <= max100; c100++) {
         for (let c30 = 0; c30 <= Math.ceil(peonCount / 30) + 1; c30++) {
             for (let c1 = 0; c1 <= Math.ceil(peonCount / 1); c1++) {
                 const totalPeons = c100 * 100 + c30 * 30 + c1;
                 if (totalPeons < peonCount) continue;
-
                 const totalCrystals = c100 * 850 + c30 * 270 + c1 * 10;
                 const totalGold = totalCrystals * crystalRate;
                 const avgGoldPerPeon = totalGold / peonCount;
-
                 if (!best || totalGold < best.totalGold) {
                     best = {
                         breakdown: [
@@ -36,16 +31,13 @@ function calculatePeonCost(peonCount, crystalRate) {
             }
         }
     }
-
     return best;
 }
-
 function PeonCalculator() {
     const [peonCountInput, setPeonCountInput] = useState(60);
     const [goldPer100CrystalInput, setGoldPer100CrystalInput] = useState(10000);
     const [result, setResult] = useState(null);
     const [loading, setLoading] = useState(false);
-
     const handleCalculate = () => {
         if (peonCountInput <= 0) {
             alert('1개 이상 입력해주세요.');
@@ -55,7 +47,6 @@ function PeonCalculator() {
             alert('10000개 이하만 입력 가능합니다.');
             return;
         }
-
         setLoading(true);
         setTimeout(() => {
             const crystalRate = goldPer100CrystalInput / 95;
@@ -64,13 +55,11 @@ function PeonCalculator() {
             setLoading(false);
         }, 300);
     };
-
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             handleCalculate();
         }
     };
-
     return (
         <div className="avatar">
             <div className="wrapper">
@@ -93,7 +82,6 @@ function PeonCalculator() {
                             모든 패키지 조합 중 가장 저렴한 조합을 자동 계산합니다.
                         </div>
                     </div>
-
                     <div className="avatar-row">
                         <label>
                             <span className="label">페온 수량</span>
@@ -109,7 +97,6 @@ function PeonCalculator() {
                             </div>
                         </label>
                     </div>
-
                     <button
                         className="btn-mint"
                         onClick={handleCalculate}
@@ -124,7 +111,6 @@ function PeonCalculator() {
                         )}
                     </button>
                 </div>
-
                 <div className="comparison-result">
                     {result ? (
                         <>
@@ -137,7 +123,6 @@ function PeonCalculator() {
                                             <p><span className='peon'>페온</span><strong>{item.name}</strong> × {item.count}개</p><p>{item.totalCrystals.toLocaleString()}<span className="crystal"> 크리스탈</span></p>
                                         </li>
                                     ))}
-
                                 </ul>
                             </div>
                             <div className="price-result flex-c">
@@ -175,6 +160,4 @@ function PeonCalculator() {
         </div>
     );
 }
-
 export default PeonCalculator;
-
