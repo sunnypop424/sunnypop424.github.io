@@ -1497,7 +1497,7 @@ export default function GemSimulator() {
 
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* 4) 가공 시뮬레이션 */}
-          <section ref={simRef} className={`col-span-2 ` + card}>
+          <section ref={simRef} className={`lg:col-span-2 ` + card}>
             {/* 타이틀 + 우측 액션 */}
             <div className="flex items-center gap-2">
               <h2 className={sectionTitle}>가공 시뮬레이션</h2>
