@@ -649,7 +649,7 @@ const onDragStart = () => {
         {/* 타이틀 + 포지션(우측) */}
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">로아 아크그리드 젬 장착 헬퍼</h1>
+            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">로아 아크그리드 젬 장착 도우미</h1>
             <div className="flex gap-2 w-auto ml-auto lg:ml-0">
               <button onClick={()=>setRole('dealer')} className={`min-w-[80px] h-8 inline-flex items-center justify-center gap-1 px-3 rounded-xl w-full lg:w-auto ${role==='dealer'? 'bg-white':'bg-white opacity-50'}`}>
                 딜러
