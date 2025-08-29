@@ -1475,7 +1475,7 @@ export default function GemSimulator() {
                   <>
 
                     {/* 목표 이름 A */}
-                    <div className={`w-full lg:w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+                    <div className={`w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 A</label>
                       <Select
                         value={tgtNames.aName}
@@ -1500,7 +1500,7 @@ export default function GemSimulator() {
                     </div>
 
                     {/* 목표 이름 B (BOTH일 때만 활성) */}
-                    <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
+                    <div className={`w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
                       <label className={labelCls}>목표 효과 B</label>
                       <Select
                         value={tgtNames.bName}
