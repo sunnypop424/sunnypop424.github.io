@@ -3,6 +3,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp, Undo2, Redo2 } from "lucide-react";
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
+
+  const USE_ANTITHETIC = true;   // 저분산 고정 ON
+  const AUTO_SCALE_RARE = true;  // 자동 스케일업 고정 ON
 /* =========================
    결정적 RNG 유틸리티 (원본 유지)
    ========================= */
@@ -289,6 +292,7 @@ function applySlot(gemKey, pos, s, slot, costAddRate, rngFn) {
    시뮬레이션 (원본 유지)
    ========================= */
 const ZERO_VALUE = { successProb: 0, legendProb: 0, relicProb: 0, ancientProb: 0, expectedGold: 0 };
+// ✅ 저분산(안티테틱) + 희귀사건 자동 스케일업(rare-guard) 버전
 function evaluateFromSimulation(
   gemKey, pos, abMode, start, target, policy, attemptsLeft, rerolls, costAddRate, unlockedReroll, selectedFirstFour, seed, tgtNames, opts = {}
 ) {
@@ -296,19 +300,27 @@ function evaluateFromSimulation(
     maxTrials = 50000,
     epsilon = 0.002,
     batch = 1000,
-    minTrials = Math.min(10000, maxTrials), // 🔹 최소 N 보장 (기본 1만회)
+    minTrials = Math.min(10000, maxTrials),
     estimator = "jeffreys",
+    // ⬇️ 신규 옵션
+    useAntithetic = true,          // 저분산(권장): 안티테틱 페어 사용
+    autoScaleRare = true,          // 희귀사건 가드
+    rareTargetSuccesses = 30,      // 희귀사건 시 확보할 성공 표본 수 목표
+    rareMaxTrials = 200000,        // 가드가 늘릴 수 있는 최대 상한
   } = opts;
-  const rand = makeRNG(seed);
-  const weightedPickIndex = (arr) => {
-    const sum = arr.reduce((a, b) => a + b.w, 0);
-    let r = rand() * sum;
-    for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r <= 0) return i; }
-    return arr.length - 1;
-  };
+
+  // 의도 동일 (그대로)
   const desirability = (s) => needDistanceByMode(pos, abMode, s, target, gemKey, tgtNames);
-  let agg = { ...ZERO_VALUE, trialsUsed: 0, ci: { low: 0, high: 0, halfWidth: 0 } };
-  const simOnce = () => {
+
+  // ▶︎ 한 회 시뮬레이션 (특정 난수 발생기 rand를 주입)
+  const simOnce = (rand) => {
+    const weightedPickIndex = (arr) => {
+      const sum = arr.reduce((a, b) => a + b.w, 0);
+      let r = rand() * sum;
+      for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r <= 0) return i; }
+      return arr.length - 1;
+    };
+
     let s = { ...start };
     let gold = 0;
     let left = attemptsLeft;
@@ -316,7 +328,7 @@ function evaluateFromSimulation(
     let unlocked = unlockedReroll;
     let rate = costAddRate;
     let first = true;
-    // ✅ 이미 목표를 만족한 상태라면(달성 즉시 가공 완료 정책) 바로 성공 처리
+
     if (policy === "STOP_ON_SUCCESS" &&
       meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) {
       const score = totalScore(s);
@@ -326,9 +338,10 @@ function evaluateFromSimulation(
         legendProb: g === "전설" ? 1 : 0,
         relicProb: g === "유물" ? 1 : 0,
         ancientProb: g === "고대" ? 1 : 0,
-        expectedGold: 0, // 시도 안 했으니 비용 0
+        expectedGold: 0,
       };
     }
+
     while (left > 0) {
       let cand = [];
       if (first && selectedFirstFour.length > 0) {
@@ -344,13 +357,12 @@ function evaluateFromSimulation(
           temp.splice(idx, 1);
         }
       }
-      // 공식 모드: cand 중 1개 균등 무작위(각 25%). 효과 변경은 applySlot 내부에서 무작위.
+
       if (OFFICIAL_RNG) {
         const pick = cand[Math.floor(rand() * cand.length)];
         const res = applySlot(gemKey, pos, s, pick, rate, rand);
         s = res.next; gold += res.goldThisAttempt; rate = res.nextRate; rrs += res.rerollDelta; unlocked = true;
       } else {
-        // 기존 탐욕 선택 유지 (옵션)
         const namesList = allowedEffectNames(gemKey, pos);
         const aName = s.aName, bName = s.bName;
         const canAChange = namesList.some((n) => n !== bName && n !== aName);
@@ -366,13 +378,14 @@ function evaluateFromSimulation(
             best = { next: res.next, gold: res.goldThisAttempt, nextRate: res.nextRate, rrd: res.rerollDelta, gain };
           }
         }
-        // 탐욕 다른 항목 보기 휴리스틱(원래 로직)
         if (best && best.gain <= 0 && unlocked && rrs > 0) { rrs -= 1; first = false; continue; }
         if (best) { s = best.next; gold += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
       }
+
       left -= 1; first = false;
       if (policy === "STOP_ON_SUCCESS" && meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) break;
     }
+
     const score = totalScore(s);
     const g = gradeOf(score);
     return {
@@ -383,48 +396,101 @@ function evaluateFromSimulation(
       expectedGold: gold,
     };
   };
+
+  // 집계 변수
   let n = 0;
   let succSum = 0, legendSum = 0, relicSum = 0, ancientSum = 0, goldSum = 0;
-  // gold의 표준오차도 보여주고 싶다면 분산추정 추가(선택)
-  while (n < maxTrials) {
-    const until = Math.min(batch, maxTrials - n);
-    for (let i = 0; i < until; i++) {
-      const one = simOnce();
-      succSum += one.successProb;   // 0 또는 1
+  let agg = { ...ZERO_VALUE, trialsUsed: 0, ci: { low: 0, high: 0, halfWidth: 0 } };
+
+  // 동적으로 늘어날 수 있는 상한
+  let localMaxTrials = maxTrials;
+
+  const seedForTrial = (baseSeed, idx) => {
+    // 32-bit 안전 시드 셔플
+    const mixed = (baseSeed >>> 0) ^ (Math.imul((idx + 1) >>> 0, 2654435761) >>> 0);
+    return mixed >>> 0;
+  };
+
+  const updateCI = () => {
+    const p = succSum / Math.max(1, n);
+    let ci;
+    if (p === 0) {
+      const up = zeroSuccessUpperBound(n);
+      ci = { low: 0, high: up, halfWidth: up / 2 };
+    } else if (p === 1) {
+      const up = zeroSuccessUpperBound(n);
+      const low = 1 - up;
+      ci = { low, high: 1, halfWidth: (1 - low) / 2 };
+    } else {
+      const w = wilsonCI(p, n);
+      ci = { low: w.low, high: w.high, halfWidth: (w.high - w.low) / 2 };
+    }
+    agg.ci = ci;
+    return ci;
+  };
+
+  while (n < localMaxTrials) {
+    // 한 번에 돌릴 "스텝" 수 (안티테틱 켰으면 실제 trial 수는 최대 2배)
+    const steps = batch;
+    for (let i = 0; i < steps; i++) {
+      // 남은 예산 확인
+      if (n >= localMaxTrials) break;
+
+      const trialSeed = seedForTrial(seed >>> 0, n + i);
+      // 기본 경로
+      const r1 = makeRNG(trialSeed);
+      const one = simOnce(r1);
+      succSum += one.successProb;
       legendSum += one.legendProb;
       relicSum += one.relicProb;
       ancientSum += one.ancientProb;
       goldSum += one.expectedGold;
-    }
-    n += until;
-    const p = succSum / n;
-    let ci;
-    if (p === 0) {
-      const up = zeroSuccessUpperBound(n); // e.g., n=10,000 => up≈0.0003 (0.03%)
-      ci = { low: 0, high: up, halfWidth: up/2 };
-    } else if (p === 1) {
-      // 대칭 처리(1 성공률): 하한만 유의미
-      const up = zeroSuccessUpperBound(n);
-      const low = 1 - up;
-      ci = { low, high: 1, halfWidth: (1-low)/2 };
-    } else {
-      const w = wilsonCI(p, n);
-      ci = { low: w.low, high: w.high, halfWidth: (w.high - w.low)/2 };
-    }
-    agg.ci = ci;
+      n += 1;
 
-    // 🔹 p가 0 또는 1이어도 최소 N까지는 계속 돌린다
+      // 안티테틱 페어 (같은 시드로 1-u 사용)
+      if (useAntithetic && n < localMaxTrials) {
+        const r2base = makeRNG(trialSeed);
+        const r2 = () => 1 - r2base();
+        const two = simOnce(r2);
+        succSum += two.successProb;
+        legendSum += two.legendProb;
+        relicSum += two.relicProb;
+        ancientSum += two.ancientProb;
+        goldSum += two.expectedGold;
+        n += 1;
+      }
+    }
+
+    const ci = updateCI();
     const hw = ci.halfWidth || 0;
+
+    // 희귀사건 가드: 성공 표본 부족하면 상한을 키워 더 돌린다
+    const rareGuardActive =
+      autoScaleRare &&
+      n >= minTrials &&
+      succSum < rareTargetSuccesses &&
+      localMaxTrials < rareMaxTrials;
+
+    if (rareGuardActive) {
+      // 배치 단위로 넉넉히 늘림
+      const bump = (useAntithetic ? 2 * batch : batch);
+      localMaxTrials = Math.min(rareMaxTrials, Math.max(localMaxTrials * 2, n + bump));
+      continue; // 더 돌린다
+    }
+
+    // 일반 수렴 조건
     if (hw <= epsilon && n >= minTrials) break;
   }
+
   agg.trialsUsed = n;
   agg.successProb = estimateRate(succSum, n, estimator);
   agg.legendProb  = estimateRate(legendSum,  n, estimator);
   agg.relicProb   = estimateRate(relicSum,   n, estimator);
   agg.ancientProb = estimateRate(ancientSum, n, estimator);
-  agg.expectedGold = goldSum / n;
+  agg.expectedGold = goldSum / Math.max(1, n);
   return agg;
 }
+
 /* ===============================
    공통 UI(LoACore 스타일): Dropdown + Toast + NumberInput
    =============================== */
@@ -693,6 +759,7 @@ export default function GemSimulator() {
   const curValid = cur.aName !== cur.bName;
   // 시뮬레이션 반복 수 (Monte Carlo maxTrials)
   const [simTrials, setSimTrials] = useState(10000);
+
   const migratedRef = useRef(false); // StrictMode 중복 실행 방지(개발모드)
   useEffect(() => {
     if (migratedRef.current) return;
@@ -923,12 +990,21 @@ export default function GemSimulator() {
       const v = evaluateFromSimulation(
         gemKeyIn, posIn, abForEval, nextManual.state, tgtIn, "RUN_TO_END",
         nextManual.attemptsLeft, nextManual.rerolls, nextManual.costAddRate, nextManual.unlocked, [],
-        seed + hash32(lb), tgtNames
-        , { maxTrials: 8000, epsilon: 0.006, batch: 500 });
+        seed + hash32(lb), tgtNames,
+        {
+          maxTrials: Math.min(8000, simTrials),
+          minTrials: Math.min(8000, simTrials),
+          epsilon: 0.006,
+          batch: 500,
+          estimator: "jeffreys",
+          useAntithetic: USE_ANTITHETIC,
+          autoScaleRare: false
+        }
+      );
       acc += v.successProb; cnt += 1;
     }
     return cnt ? acc / cnt : 0;
-  }, [tgtNames]);
+  }, [tgtNames, simTrials]);
   function sampleNewFourSlots(seed, gemKeyIn, posIn, manualIn) {
     const rng = makeRNG(seed);
     const pool = buildWeightedItems(manualIn.state, manualIn.attemptsLeft, posIn, gemKeyIn, manualIn.costAddRate);
@@ -999,27 +1075,27 @@ export default function GemSimulator() {
     // 이전 예약 취소
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
+      const commonOpts = {
+        maxTrials: simTrials,
+        minTrials: simTrials,
+        epsilon: epsilonByTrials(simTrials),
+        batch: batchByTrials(simTrials),
+        estimator: "jeffreys",
+        useAntithetic: USE_ANTITHETIC,
+        autoScaleRare: AUTO_SCALE_RARE,
+        rareTargetSuccesses: 30,
+        rareMaxTrials: 200000,
+      };
+
       const stop = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "STOP_ON_SUCCESS",
-        manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames
-        , {
-            maxTrials: simTrials,
-            minTrials: simTrials, // 🔹 사용자가 고른 반복 수는 반드시 채움
-            epsilon: epsilonByTrials(simTrials),
-            batch: batchByTrials(simTrials),
-            estimator: "jeffreys",
-          }
+        manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames,
+        commonOpts
       );
       const run = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "RUN_TO_END",
-        manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 103, tgtNames
-        , {
-            maxTrials: simTrials,
-            minTrials: simTrials, // 🔹 사용자가 고른 반복 수는 반드시 채움
-            epsilon: epsilonByTrials(simTrials),
-            batch: batchByTrials(simTrials),
-            estimator: "jeffreys",
-          }
+        manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 103, tgtNames,
+        commonOpts
       );
       if (token === tokenRef.current) { setResultStop(stop); setResultRun(run); setIsComputing(false); }
     }, 0);
@@ -1179,22 +1255,24 @@ export default function GemSimulator() {
       `}</style>
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         <section className="py-2 lg:py-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">로아 아크그리드 젬 가공 확률 계산기</h1>
-            <div className="flex gap-2 w-auto ml-auto lg:ml-0">
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
-                <div className="min-w-[170px]">
-                  <Dropdown
-                    value={simTrials}
-                    onChange={setSimTrials}
-                    items={SIM_OPTIONS}
-                    placeholder="반복 수 선택"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+<div className="flex items-center justify-between gap-3 flex-wrap">
+  <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
+    로아 아크그리드 젬 가공 확률 계산기
+  </h1>
+
+  <div className="flex gap-2 w-auto ml-auto lg:ml-0 items-center">
+    <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
+    <div className="min-w-[170px]">
+      <Dropdown
+        value={simTrials}
+        onChange={setSimTrials}
+        items={SIM_OPTIONS}
+        placeholder="반복 수 선택"
+      />
+    </div>
+  </div>
+</div>
+
         </section>
         {/* 1) 기본 설정 */}
         {/* 1) 기본 설정 */}
