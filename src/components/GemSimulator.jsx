@@ -51,8 +51,31 @@ const GOLD_PER_ATTEMPT = 900;
 // maxTrials: 최대 시뮬 회수, epsilon: 95% CI 반폭(절대값), batch: 배치 크기
 // note: successProb는 베르누이 평균이라 표준오차를 정확히 계산 가능
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const fmtProb = (p) => ((Math.max(0, Math.min(1, isNaN(p) ? 0 : p)) * 100).toFixed(5) + "%");
+// % 포맷: 원래 값 그대로, 소수점 5자리 고정
+function fmtProbSmart(p /*, ci */) {
+  const x = Number(p);
+  if (!Number.isFinite(x)) return "0.00000%";
+  return (x * 100).toFixed(5) + "%";
+}
+
+// 레거시 호환
+const fmtProb = (p) => fmtProbSmart(p);
 const fmtNum = (n) => n.toLocaleString();
+
+// 확률 추정기: mle(기본), laplace, jeffreys
+function estimateRate(successes, n, method = "mle") {
+  if (n <= 0) return 0;
+  switch (method) {
+    case "laplace":   // Beta(1,1) 사전 → (s+1)/(n+2)
+      return (successes + 1) / (n + 2);
+    case "jeffreys":  // Beta(0.5,0.5) 사전 → (s+0.5)/(n+1)
+      return (successes + 0.5) / (n + 1);
+    case "mle":
+    default:
+      return successes / n;
+  }
+}
+
 const OFFICIAL_RNG = true;
 /* ===== 시뮬레이션 횟수 옵션/헬퍼 ===== */
 const SIM_OPTIONS = [
@@ -61,6 +84,20 @@ const SIM_OPTIONS = [
   { value: 10000, label: "10,000회 (추천)" },
   { value: 50000, label: "50,000회 (정밀)" },
 ];
+
+
+function wilsonCI(p, n, z = 1.96) {
+  const denom = 1 + (z*z)/n;
+  const center = (p + (z*z)/(2*n)) / denom;
+  const margin = (z / denom) * Math.sqrt((p*(1-p)/n) + (z*z)/(4*n*n));
+  return { low: Math.max(0, center - margin), high: Math.min(1, center + margin) };
+}
+
+// 0 successes일 때의 95% 상한 (Clopper–Pearson 근사)
+function zeroSuccessUpperBound(n, alpha = 0.05) {
+  return 1 - Math.pow(alpha, 1/n); // ~= 3/n
+}
+
 // 반복 수에 따른 수렴 기준(95% CI 반폭)과 배치 크기
 const epsilonByTrials = (n) => {
   if (n >= 50000) return 0.002;   // ±0.2%p
@@ -257,8 +294,10 @@ function evaluateFromSimulation(
 ) {
   const {
     maxTrials = 50000,
-    epsilon = 0.002,   // 목표 달성 확률의 95% CI 반폭(±0.2%p)
+    epsilon = 0.002,
     batch = 1000,
+    minTrials = Math.min(10000, maxTrials), // 🔹 최소 N 보장 (기본 1만회)
+    estimator = "jeffreys",
   } = opts;
   const rand = makeRNG(seed);
   const weightedPickIndex = (arr) => {
@@ -271,11 +310,11 @@ function evaluateFromSimulation(
   let agg = { ...ZERO_VALUE, trialsUsed: 0, ci: { low: 0, high: 0, halfWidth: 0 } };
   const simOnce = () => {
     let s = { ...start };
+    let gold = 0;
     let left = attemptsLeft;
     let rrs = rerolls;
     let unlocked = unlockedReroll;
     let rate = costAddRate;
-    let goldSum = 0;
     let first = true;
     // ✅ 이미 목표를 만족한 상태라면(달성 즉시 가공 완료 정책) 바로 성공 처리
     if (policy === "STOP_ON_SUCCESS" &&
@@ -309,7 +348,7 @@ function evaluateFromSimulation(
       if (OFFICIAL_RNG) {
         const pick = cand[Math.floor(rand() * cand.length)];
         const res = applySlot(gemKey, pos, s, pick, rate, rand);
-        s = res.next; goldSum += res.goldThisAttempt; rate = res.nextRate; rrs += res.rerollDelta; unlocked = true;
+        s = res.next; gold += res.goldThisAttempt; rate = res.nextRate; rrs += res.rerollDelta; unlocked = true;
       } else {
         // 기존 탐욕 선택 유지 (옵션)
         const namesList = allowedEffectNames(gemKey, pos);
@@ -329,7 +368,7 @@ function evaluateFromSimulation(
         }
         // 탐욕 다른 항목 보기 휴리스틱(원래 로직)
         if (best && best.gain <= 0 && unlocked && rrs > 0) { rrs -= 1; first = false; continue; }
-        if (best) { s = best.next; goldSum += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
+        if (best) { s = best.next; gold += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
       }
       left -= 1; first = false;
       if (policy === "STOP_ON_SUCCESS" && meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) break;
@@ -341,7 +380,7 @@ function evaluateFromSimulation(
       legendProb: g === "전설" ? 1 : 0,
       relicProb: g === "유물" ? 1 : 0,
       ancientProb: g === "고대" ? 1 : 0,
-      expectedGold: goldSum,
+      expectedGold: gold,
     };
   };
   let n = 0;
@@ -358,18 +397,31 @@ function evaluateFromSimulation(
       goldSum += one.expectedGold;
     }
     n += until;
-    // 95% 신뢰구간 (정규 근사): p ± 1.96*sqrt(p(1-p)/n)
     const p = succSum / n;
-    const se = Math.sqrt(Math.max(p * (1 - p), 0) / Math.max(n, 1));
-    const hw = 1.96 * se;
-    agg.ci = { low: Math.max(0, p - hw), high: Math.min(1, p + hw), halfWidth: hw };
-    if (hw <= epsilon) break; // 충분히 수렴하면 종료
+    let ci;
+    if (p === 0) {
+      const up = zeroSuccessUpperBound(n); // e.g., n=10,000 => up≈0.0003 (0.03%)
+      ci = { low: 0, high: up, halfWidth: up/2 };
+    } else if (p === 1) {
+      // 대칭 처리(1 성공률): 하한만 유의미
+      const up = zeroSuccessUpperBound(n);
+      const low = 1 - up;
+      ci = { low, high: 1, halfWidth: (1-low)/2 };
+    } else {
+      const w = wilsonCI(p, n);
+      ci = { low: w.low, high: w.high, halfWidth: (w.high - w.low)/2 };
+    }
+    agg.ci = ci;
+
+    // 🔹 p가 0 또는 1이어도 최소 N까지는 계속 돌린다
+    const hw = ci.halfWidth || 0;
+    if (hw <= epsilon && n >= minTrials) break;
   }
   agg.trialsUsed = n;
-  agg.successProb = succSum / n;
-  agg.legendProb = legendSum / n;
-  agg.relicProb = relicSum / n;
-  agg.ancientProb = ancientSum / n;
+  agg.successProb = estimateRate(succSum, n, estimator);
+  agg.legendProb  = estimateRate(legendSum,  n, estimator);
+  agg.relicProb   = estimateRate(relicSum,   n, estimator);
+  agg.ancientProb = estimateRate(ancientSum, n, estimator);
   agg.expectedGold = goldSum / n;
   return agg;
 }
@@ -950,12 +1002,24 @@ export default function GemSimulator() {
       const stop = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "STOP_ON_SUCCESS",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames
-        , { maxTrials: simTrials, epsilon: epsilonByTrials(simTrials), batch: batchByTrials(simTrials) }
+        , {
+            maxTrials: simTrials,
+            minTrials: simTrials, // 🔹 사용자가 고른 반복 수는 반드시 채움
+            epsilon: epsilonByTrials(simTrials),
+            batch: batchByTrials(simTrials),
+            estimator: "jeffreys",
+          }
       );
       const run = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "RUN_TO_END",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 103, tgtNames
-        , { maxTrials: simTrials, epsilon: epsilonByTrials(simTrials), batch: batchByTrials(simTrials) }
+        , {
+            maxTrials: simTrials,
+            minTrials: simTrials, // 🔹 사용자가 고른 반복 수는 반드시 채움
+            epsilon: epsilonByTrials(simTrials),
+            batch: batchByTrials(simTrials),
+            estimator: "jeffreys",
+          }
       );
       if (token === tokenRef.current) { setResultStop(stop); setResultRun(run); setIsComputing(false); }
     }, 0);
@@ -1793,7 +1857,9 @@ export default function GemSimulator() {
                         <div className="flex items-center justify-between">
                           <div className="text-xs text-gray-500">달성 즉시 가공 완료</div>
                         </div>
-                        <div className="mt-1 text-2xl font-bold">{fmtProb(resultStop.successProb)}</div>
+                        <div className="mt-1 text-2xl font-bold">
+                          {fmtProbSmart(resultStop.successProb, resultStop.ci)}
+                        </div>
                         <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
