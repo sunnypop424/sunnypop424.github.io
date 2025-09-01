@@ -120,20 +120,21 @@ function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMi
   }
   return filtered.slice(0,200);
 }
-/* ===== 라운드 로빈 타깃 업그레이드 그리디 ===== */
+/* ===== 라운드 로빈 타깃 업그레이드 (강제 목표 ‘모두 충족’ 보장) ===== */
 function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80) {
   const W = sanitizeWeights(weights);
   const thresholdsOf = (grade) => CORE_THRESHOLDS[grade];
   const minOf = (grade) => Math.min(...thresholdsOf(grade));
   const nextThreshold = (grade, current) => {
     const arr = thresholdsOf(grade);
-    for (let i=0;i<arr.length;i++){
+    for (let i = 0; i < arr.length; i++) {
       if (arr[i] > (current ?? -Infinity)) return arr[i];
     }
     return null;
   };
+
   const bestMinHit = (cands, target) => {
-    // target 이상 달성 조합 중 "딱 넘기는" 걸 우선
+    // target 이상 달성 조합 중 “딱 넘기는” 걸 우선
     const ok = cands.filter(ci => (ci.thr.length ? Math.max(...ci.thr) : 0) >= target);
     if (ok.length === 0) return null;
     // totalPoint ASC → totalWill ASC → roleSum DESC → score DESC
@@ -146,88 +147,134 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 80
     return ok[0];
   };
   const bestScore = (cands) => cands.sort((a,b)=>b.score-a.score)[0] || null;
-  // 코어별 현재 pick과 남은 젬 풀
-  /** @type {ComboInfo[]} */
-  const picks = Array.from({length: cores.length}, () => ({ list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 }));
-  let remaining = pool.slice();
-  // 후보 생성기 (풀과 조건에 따라 매번 생성)
-  const candidatesFor = (core, gemPool) => {
-    const list = enumerateCoreCombos(gemPool, core.grade, role, W, core.minThreshold, core.enforceMin)
+
+  const emptyPick = { list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 };
+
+  // 후보 생성 (현재 젬 풀 기준으로 perCoreLimit 상위만)
+  const candidatesFor = (core, gemPool) =>
+    enumerateCoreCombos(gemPool, core.grade, role, W, core.minThreshold, core.enforceMin)
       .filter(ci => ci.list.length > 0)
       .sort((a,b)=>b.score-a.score)
       .slice(0, perCoreLimit);
-    return list;
-  };
-  // 젬 사용/반납 헬퍼
+
+  // 젬 풀 조작 헬퍼
   const removeUsed = (gemPool, combo) => {
     if (!combo || !combo.list) return gemPool;
     const used = new Set(combo.list.map(g=>g.id));
     return gemPool.filter(g=>!used.has(g.id));
   };
-  const returnUsed = (gemPool, combo) => {
-    if (!combo || !combo.list) return gemPool;
-    // 이미 들어있는지 체크해서 중복 삽입 방지
-    const inPool = new Set(gemPool.map(g=>g.id));
-    const add = combo.list.filter(g=>!inPool.has(g.id));
-    return gemPool.concat(add);
-  };
-  // 1) 1라운드: 강제 최소(effMin) 먼저 전부 달성 (가능하면)
-  for (let i=0;i<cores.length;i++){
-    const c = cores[i];
-    const effMin = (c.minThreshold ?? minOf(c.grade));
-    const cands = candidatesFor(c, remaining);
-    let choice = null;
-    if (c.enforceMin) {
-      choice = bestMinHit(cands, effMin) || bestScore(cands);
-    } else {
-      // 비강제: 점수 높은 거
-      choice = bestScore(cands);
+
+  // ---------- [단계 A] 강제 목표 “동시 충족”을 위한 전역 배치 ----------
+  // 1) 강제 코어를 우선 배치 대상으로 묶고(원래 순서 유지), 비강제는 뒤로
+  const enforcedIdx = cores
+    .map((c,i)=> c.enforceMin ? i : -1)
+    .filter(i=> i !== -1);
+  const nonEnforcedIdx = cores
+    .map((c,i)=> !c.enforceMin ? i : -1)
+    .filter(i=> i !== -1);
+
+  // 강제 코어 시작점을 회전시키며 여러 순열을 시도 → “강제 목표를 만족한 코어 수” 최대안을 채택
+  const rotations = Math.max(1, enforcedIdx.length);
+  let bestAssignment = { picks: cores.map(_=>emptyPick), remaining: pool.slice(), satisfiedCount: -1, scoreSum: -Infinity };
+
+  for (let r = 0; r < rotations; r++) {
+    const start = r % Math.max(1, enforcedIdx.length);
+    const ordered = enforcedIdx.length
+      ? enforcedIdx.slice(start).concat(enforcedIdx.slice(0, start)).concat(nonEnforcedIdx)
+      : nonEnforcedIdx.slice();
+
+    let remaining = pool.slice();
+    /** @type {ComboInfo[]} */
+    const picks = Array.from({length: cores.length}, () => emptyPick);
+
+    for (const i of ordered) {
+      const c = cores[i];
+      const cands = candidatesFor(c, remaining);
+      let choice = null;
+      if (c.enforceMin) {
+        const effMin = (c.minThreshold ?? minOf(c.grade));
+        // 강제 단계에서는 “무조건 목표를 넘기는 해”만 선택 (없으면 비워둠)
+        choice = bestMinHit(cands, effMin);
+      } else {
+        // 비강제는 그냥 점수 최선
+        choice = bestScore(cands);
+      }
+      picks[i] = choice || emptyPick;
+      remaining = removeUsed(remaining, picks[i]);
     }
-    picks[i] = choice || { list:[], totalWill:0, totalPoint:0, thr:[], roleSum:0, score:0 };
-    remaining = removeUsed(remaining, picks[i]);
+
+    // 강제 목표 달성 개수 및 품질 점수 계산
+    let satisfied = 0;
+    let quality = 0;
+    enforcedIdx.forEach(i => {
+      const c = cores[i];
+      const effMin = (c.minThreshold ?? minOf(c.grade));
+      const maxThr = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
+      if (maxThr >= effMin) satisfied++;
+      // tie-breaker: (달성한 thr 높이 + roleSum) 가중
+      quality += (maxThr >= effMin ? (maxThr - effMin + 1) : 0) * 1e6 + picks[i].roleSum;
+    });
+
+    if (
+      satisfied > bestAssignment.satisfiedCount ||
+      (satisfied === bestAssignment.satisfiedCount && quality > bestAssignment.scoreSum)
+    ) {
+      bestAssignment = { picks, remaining, satisfiedCount: satisfied, scoreSum: quality };
+    }
   }
-  // 2) 모두 목표(effMin) 달성했는지 확인
-  const allMinOk = cores.every((c, i) => {
-    if (!c.enforceMin) return true; // 비강제는 패스
+
+  // 선택된 최적 배치
+  let picks = bestAssignment.picks;
+  let remaining = bestAssignment.remaining;
+
+  // 강제 코어가 모두 목표 달성했는지 확인
+  const allMinOk = enforcedIdx.every(i => {
+    const c = cores[i];
     const effMin = (c.minThreshold ?? minOf(c.grade));
     const maxThr = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
     return maxThr >= effMin;
   });
+
+  // 강제 목표가 하나라도 실패면 여기서 종료(가능한 한 많이 맞춘 상태 반환)
   if (!allMinOk) {
-    // 최소도 안 되는 상황이면 여기서 종료(현 그리디 결과 반환)
     return { picks };
   }
-  // 3) 라운드 로빈 업그레이드: 1→2→3 코어 다음 구간, 그 다음 라운드엔 다다음 구간…
+
+  // ---------- [단계 B] 라운드 로빈 업그레이드 (모두 목표 달성 후) ----------
   let progressed = true;
   while (progressed) {
     progressed = false;
-    for (let i=0;i<cores.length;i++){
+    for (let i = 0; i < cores.length; i++) {
       const c = cores[i];
-      // 현재 달성 구간(없으면 0)
       const curMax = picks[i].thr.length ? Math.max(...picks[i].thr) : 0;
       const nxt = nextThreshold(c.grade, curMax);
-      if (nxt == null) continue; // 더 이상 업그레이드 구간 없음
-      // 이 코어가 쓰던 젬을 잠시 반환하고, 업그레이드 시도
-      let poolWithRefund = returnUsed(remaining, picks[i]);
+      if (nxt == null) continue;
+
+      // 업그레이드 시도: 현 코어 젬 반납 후 재선택
+      // (다른 코어의 젬은 건드리지 않음 — 라운드로빈이 돌아가며 자연 조정)
+      // no-loop-func 회피: 콜백이 캡쳐할 변수를 루프 지역 상수로 고정
+      const currentRemaining = remaining;
+      const currentRemainingIds = new Set(currentRemaining.map(x => x.id));
+      const refundList = picks[i].list;
+      const poolWithRefund = currentRemaining.concat(
+        refundList.filter(g => !currentRemainingIds.has(g.id))
+      );
+
       const cands = candidatesFor(c, poolWithRefund);
       const upgrade = bestMinHit(cands, nxt);
       if (upgrade) {
-        // 성공: 새 픽으로 교체
-        //  - 기존 픽 젬은 refund 상태에서 제거되었을 것이므로, 남은 풀은 새 픽 사용분만 빼면 됨
+        // 새 픽으로 교체
         picks[i] = upgrade;
-        // poolWithRefund에서 새 픽 사용 젬을 제거 → 그게 새로운 remaining
-        const used = new Set(upgrade.list.map(g=>g.id));
-        remaining = poolWithRefund.filter(g=>!used.has(g.id));
+        const usedNew = new Set(upgrade.list.map(g=>g.id));
+        remaining = poolWithRefund.filter(g=>!usedNew.has(g.id));
         progressed = true;
-      } else {
-        // 실패: 반환했던 걸 되돌리기(= 아무 변화 없이 유지)
-        // remaining은 그대로(환불 전 상태)여야 하므로, 아무 것도 건드리지 않음
-        // (위에서 poolWithRefund를 지역변수로만 썼기 때문에 remaining 불변)
       }
     }
   }
+
   return { picks };
 }
+
 /* =============================== Portal-aware Draggable =============================== */
 const dragPortal = typeof document !== "undefined" ? document.body : null;
 function PortalAwareDraggable({ draggableId, index, children }) {
