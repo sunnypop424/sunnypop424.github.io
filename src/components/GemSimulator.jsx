@@ -4,8 +4,8 @@ import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp, Undo2, Redo
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
 
-  const USE_ANTITHETIC = true;   // 저분산 고정 ON
-  const AUTO_SCALE_RARE = true;  // 자동 스케일업 고정 ON
+const USE_ANTITHETIC = true;   // 저분산 고정 ON
+const AUTO_SCALE_RARE = true;  // 자동 스케일업 고정 ON
 /* =========================
    결정적 RNG 유틸리티 (원본 유지)
    ========================= */
@@ -33,6 +33,9 @@ function makeRNG(seed) {
     return (s >>> 0) / 4294967296;
   };
 }
+// === 확률 경계 헬퍼 ===
+const isZeroProb = (p) => !(Number(p) > 0);
+const isOneProb = (p) => Number(p) >= 1;
 /* =========================
    등급/젬타입/상수 (원본 유지)
    ========================= */
@@ -55,21 +58,45 @@ const GOLD_PER_ATTEMPT = 900;
 // note: successProb는 베르누이 평균이라 표준오차를 정확히 계산 가능
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 // % 포맷: 원래 값 그대로, 소수점 5자리 고정
-function fmtProbSmart(p /*, ci */) {
+function fmtProbSmart(p) {
   const x = Number(p);
-  if (!Number.isFinite(x)) return "0.00000%";
-  return (x * 100).toFixed(5) + "%";
+  if (!Number.isFinite(x) || x <= 0) return "0%";           // 완전 0%면 0
+  if (x >= 1) return "100.00000%";                          // 전부 성공이면 100.00000%
+  return (x * 100).toFixed(5) + "%";                        // 그 외는 5자리 고정
 }
+
 
 // 레거시 호환
 const fmtProb = (p) => fmtProbSmart(p);
 const fmtNum = (n) => n.toLocaleString();
 
+
+// 기대비용: 성공 1회 얻기 위해 드는 평균 골드 (확률이 낮을수록 ↑)
+function goldPerSuccess(expectedGold, p) {
+  if (!Number.isFinite(expectedGold) || expectedGold <= 0) return 0;
+  if (!Number.isFinite(p) || p <= 0) return Infinity; // 성공확률 0%면 무한대 취급
+  return expectedGold / p;
+}
+
+// 퍼센트 유틸: width 계산용
+const pct = (p) => `${Math.max(0, Math.min(100, Math.round((Number(p) || 0) * 100)))}%`;
+
+
+// 시각적 뱃지(난이도): 확률이 낮을수록 "골드부담 ↑"
+function burdenBadge(p) {
+  if (p >= 0.20) return { label: "낮음", tone: "bg-emerald-50 border-emerald-200 text-emerald-800" };
+  if (p >= 0.05) return { label: "보통", tone: "bg-amber-50 border-amber-200 text-amber-800" };
+  if (p >= 0.01) return { label: "높음", tone: "bg-orange-50 border-orange-200 text-orange-800" };
+  return { label: "매우 높음", tone: "bg-rose-50 border-rose-200 text-rose-800" };
+}
+
+
 // 확률 추정기: mle(기본), laplace, jeffreys
 function estimateRate(successes, n, method = "mle") {
   if (n <= 0) return 0;
   // ✅ 경계 스냅: 전부 성공이면 1(=100%)로 고정
-  if (successes >= n) return 1; 
+  if (successes === 0) return 0;
+  if (successes === n) return 1;
   switch (method) {
     case "laplace":   // Beta(1,1) 사전 → (s+1)/(n+2)
       return (successes + 1) / (n + 2);
@@ -92,23 +119,25 @@ const SIM_OPTIONS = [
 
 
 function wilsonCI(p, n, z = 1.96) {
-  const denom = 1 + (z*z)/n;
-  const center = (p + (z*z)/(2*n)) / denom;
-  const margin = (z / denom) * Math.sqrt((p*(1-p)/n) + (z*z)/(4*n*n));
+  const denom = 1 + (z * z) / n;
+  const center = (p + (z * z) / (2 * n)) / denom;
+  const margin = (z / denom) * Math.sqrt((p * (1 - p) / n) + (z * z) / (4 * n * n));
   return { low: Math.max(0, center - margin), high: Math.min(1, center + margin) };
 }
 
 // 0 successes일 때의 95% 상한 (Clopper–Pearson 근사)
 function zeroSuccessUpperBound(n, alpha = 0.05) {
-  return 1 - Math.pow(alpha, 1/n); // ~= 3/n
+  return 1 - Math.pow(alpha, 1 / n); // ~= 3/n
 }
 
 // 반복 수에 따른 수렴 기준(95% CI 반폭)과 배치 크기
 const epsilonByTrials = (n) => {
-  if (n >= 50000) return 0.002;   // ±0.2%p
-  if (n >= 10000) return 0.0035;  // ±0.35%p
-  if (n >= 5000) return 0.005;   // ±0.5%p
-  return 0.007;                   // ±0.7%p
+  if (n >= 200000) return 0.0001; // ±0.01%p
+  if (n >= 100000) return 0.0002; // ±0.02%p
+  if (n >= 50000) return 0.0003; // ±0.03%p
+  if (n >= 10000) return 0.0005; // ±0.05%p
+  if (n >= 5000) return 0.0007; // ±0.07%p
+  return 0.001;                   // ±0.10%p
 };
 const batchByTrials = (n) => {
   if (n >= 50000) return 1000;
@@ -307,8 +336,9 @@ function evaluateFromSimulation(
     // ⬇️ 신규 옵션
     useAntithetic = true,          // 저분산(권장): 안티테틱 페어 사용
     autoScaleRare = true,          // 희귀사건 가드
-    rareTargetSuccesses = 30,      // 희귀사건 시 확보할 성공 표본 수 목표
-    rareMaxTrials = 200000,        // 가드가 늘릴 수 있는 최대 상한
+    rareTargetSuccesses = 100,      // 희귀사건 시 확보할 성공 표본 수 목표
+    rareMaxTrials = 200000,            // (구버전 호환용)
+    rareTiers = [200000], // ← 순차 확장 티어
   } = opts;
 
   // 의도 동일 (그대로)
@@ -407,6 +437,18 @@ function evaluateFromSimulation(
   // 동적으로 늘어날 수 있는 상한
   let localMaxTrials = maxTrials;
 
+  // 추가: 희귀 강제 모드(0% 판독 시 일반 종료조건을 무시)
+  let forceRare = false;
+
+
+  // 희귀 티어 헬퍼
+  const tiers = Array.isArray(rareTiers) && rareTiers.length
+    ? [...rareTiers].sort((a, b) => a - b)
+    : [rareMaxTrials];
+  const hardCap = tiers[tiers.length - 1];
+  const nextTier = (cur) => tiers.find(t => t > cur) || cur;
+  const firstTier = tiers[0];
+
   const seedForTrial = (baseSeed, idx) => {
     // 32-bit 안전 시드 셔플
     const mixed = (baseSeed >>> 0) ^ (Math.imul((idx + 1) >>> 0, 2654435761) >>> 0);
@@ -466,32 +508,73 @@ function evaluateFromSimulation(
     const ci = updateCI();
     const hw = ci.halfWidth || 0;
 
-    // 희귀사건 가드: 성공 표본 부족하면 상한을 키워 더 돌린다
+    // 0%면 즉시 희귀 강제 모드로 전환하고 상한을 '다음 티어'로 점프
+    if (autoScaleRare && n >= minTrials && succSum === 0 && localMaxTrials < hardCap) {
+      // 최초엔 최소 티어까지, 이미 티어면 다음 티어로
+      localMaxTrials = localMaxTrials < firstTier ? firstTier : nextTier(localMaxTrials);
+      forceRare = true;   // ← 일반 조기 종료를 잠시 비활성화
+      continue;
+    }
+
+    // 희귀사건 가드: 성공 표본 부족하면 상한을 키워 더 돌린다(점진 확장)
     const rareGuardActive =
       autoScaleRare &&
       n >= minTrials &&
       succSum < rareTargetSuccesses &&
-      localMaxTrials < rareMaxTrials;
+      localMaxTrials < hardCap;
 
     if (rareGuardActive) {
-      // 배치 단위로 넉넉히 늘림
-      const bump = (useAntithetic ? 2 * batch : batch);
-      localMaxTrials = Math.min(rareMaxTrials, Math.max(localMaxTrials * 2, n + bump));
+      // 티어 기반 점프: 20만 → 50만 → 100만 (더 이상 티어 없으면 현 상한 유지)
+      const next = localMaxTrials < firstTier ? firstTier : nextTier(localMaxTrials);
+      localMaxTrials = Math.min(hardCap, next);
       continue; // 더 돌린다
     }
 
     // 일반 수렴 조건
-    if (hw <= epsilon && n >= minTrials) break;
+    if (!forceRare && hw <= epsilon && n >= minTrials) break;
   }
 
   agg.trialsUsed = n;
   agg.successProb = estimateRate(succSum, n, estimator);
-  agg.legendProb  = estimateRate(legendSum,  n, estimator);
-  agg.relicProb   = estimateRate(relicSum,   n, estimator);
+  agg.legendProb = estimateRate(legendSum, n, estimator);
+  agg.relicProb = estimateRate(relicSum, n, estimator);
   agg.ancientProb = estimateRate(ancientSum, n, estimator);
   agg.expectedGold = goldSum / Math.max(1, n);
+  // UI용: 원시 성공 회수(정수)
+  agg.successes = succSum | 0;
   return agg;
 }
+
+
+// ===== 등급별 그라디언트 색상 (start를 적당히 어둡게 조정) =====
+const GRADE_GRADIENTS = {
+  legend: "linear-gradient(90deg, #7A3E00, #B16800)",  // 전설: 진한 오렌지브라운 → 골드브라운
+  relic: "linear-gradient(90deg, #8C2F06, #AB4102)",  // 유물: 다크 오렌지레드 → 토마토브라운
+  ancient: "linear-gradient(90deg, #A67C37, #F5DFAB)",  // 고대: 중간 골드브라운 → 레몬쉬폰
+};
+
+// 등급 확률 정렬 + 부등호(>=) 체인 생성용
+function rankGradeOrder(run, eps = 0.0005) {
+  if (!run) return { order: [], comps: [] };
+  let arr = [
+    { key: "legendProb", label: "전설", p: Number(run.legendProb || 0), grad: GRADE_GRADIENTS.legend },
+    { key: "relicProb", label: "유물", p: Number(run.relicProb || 0), grad: GRADE_GRADIENTS.relic },
+    { key: "ancientProb", label: "고대", p: Number(run.ancientProb || 0), grad: GRADE_GRADIENTS.ancient },
+  ];
+  // 0%는 표시 대상에서 제거
+  arr = arr.filter(it => !isZeroProb(it.p));
+  if (!arr.length) return { order: [], comps: [] };
+
+  arr.sort((a, b) => b.p - a.p);
+  const comps = [];
+  for (let i = 0; i < arr.length - 1; i++) {
+    const diff = arr[i].p - arr[i + 1].p;
+    comps.push(Math.abs(diff) <= eps ? "=" : ">");
+  }
+  return { order: arr, comps };
+}
+
+
 
 /* ===============================
    공통 UI(LoACore 스타일): Dropdown + Toast + NumberInput
@@ -1085,8 +1168,8 @@ export default function GemSimulator() {
         estimator: "jeffreys",
         useAntithetic: USE_ANTITHETIC,
         autoScaleRare: AUTO_SCALE_RARE,
-        rareTargetSuccesses: 30,
-        rareMaxTrials: 200000,
+        rareTargetSuccesses: 100,
+        rareTiers: [200000],
       };
 
       const stop = evaluateFromSimulation(
@@ -1257,23 +1340,23 @@ export default function GemSimulator() {
       `}</style>
       <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         <section className="py-2 lg:py-3">
-<div className="flex items-center justify-between gap-3 flex-wrap">
-  <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
-    로아 아크그리드 젬 가공 확률 계산기
-  </h1>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
+              로아 아크그리드 젬 가공 확률 계산기
+            </h1>
 
-  <div className="flex gap-2 w-auto ml-auto lg:ml-0 items-center">
-    <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
-    <div className="min-w-[170px]">
-      <Dropdown
-        value={simTrials}
-        onChange={setSimTrials}
-        items={SIM_OPTIONS}
-        placeholder="반복 수 선택"
-      />
-    </div>
-  </div>
-</div>
+            <div className="flex gap-2 w-auto ml-auto lg:ml-0 items-center">
+              <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
+              <div className="min-w-[170px]">
+                <Dropdown
+                  value={simTrials}
+                  onChange={setSimTrials}
+                  items={SIM_OPTIONS}
+                  placeholder="반복 수 선택"
+                />
+              </div>
+            </div>
+          </div>
 
         </section>
         {/* 1) 기본 설정 */}
@@ -1309,48 +1392,48 @@ export default function GemSimulator() {
           </div>
           {/* 코어 카드와 동일한 레이아웃/간격/높이 */}
           <div className="mt-3">
-<div
-  className="
+            <div
+              className="
     relative 
     grid grid-cols-2 gap-2 
     lg:flex lg:flex-row lg:flex-nowrap lg:gap-3 
     items-stretch lg:items-end 
     border rounded-xl p-3 bg-white overflow-visible
   "
->
-  {/* 젬 타입 */}
-  <div className={`flex flex-col w-full lg:w-[160px] w-full lg:w-56 ${basicLocked ? "opacity-50" : ""}`}>
-    <label className={labelCls}>젬 타입</label>
-    <Dropdown
-      className="w-full"
-      value={gemKey}
-      onChange={(v) => setGemKey(v)}
-      items={Object.keys(GEM_TYPES).map((k) => ({ value: k, label: k }))}
-      placeholder="젬 타입"
-      disabled={basicLocked}
-    />
-  </div>
-  {/* 등급 */}
-  <div className={`flex flex-col w-full lg:w-[120px] w-full lg:w-40 ${basicLocked ? "opacity-50" : ""}`}>
-    <label className={labelCls}>등급</label>
-    <Dropdown
-      className="w-full"
-      value={rarity}
-      onChange={(v) => setRarity(v)}
-      items={["고급", "희귀", "영웅"].map((k) => ({ value: k, label: k }))}
-      placeholder="등급"
-      disabled={basicLocked}
-    />
-  </div>
-  {/* 가공/다른 항목 보기 */}
-  <div className="flex flex-col w-full col-span-2 lg:col-span-1 lg:w-auto">
-    <label className={labelCls}>기본 시도/다른 항목 보기</label>
-    <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center text-sm">
-      가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 다른 항목 보기{" "}
-      <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>회
-    </div>
-  </div>
-</div>
+            >
+              {/* 젬 타입 */}
+              <div className={`flex flex-col w-full lg:w-[160px] w-full lg:w-56 ${basicLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>젬 타입</label>
+                <Dropdown
+                  className="w-full"
+                  value={gemKey}
+                  onChange={(v) => setGemKey(v)}
+                  items={Object.keys(GEM_TYPES).map((k) => ({ value: k, label: k }))}
+                  placeholder="젬 타입"
+                  disabled={basicLocked}
+                />
+              </div>
+              {/* 등급 */}
+              <div className={`flex flex-col w-full lg:w-[120px] w-full lg:w-40 ${basicLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>등급</label>
+                <Dropdown
+                  className="w-full"
+                  value={rarity}
+                  onChange={(v) => setRarity(v)}
+                  items={["고급", "희귀", "영웅"].map((k) => ({ value: k, label: k }))}
+                  placeholder="등급"
+                  disabled={basicLocked}
+                />
+              </div>
+              {/* 가공/다른 항목 보기 */}
+              <div className="flex flex-col w-full col-span-2 lg:col-span-1 lg:w-auto">
+                <label className={labelCls}>기본 시도/다른 항목 보기</label>
+                <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center text-sm">
+                  가공 횟수 <b className="mx-1">{RARITY_ATTEMPTS[rarity]}</b> · 다른 항목 보기{" "}
+                  <b className="ml-1">{RARITY_BASE_REROLLS[rarity]}</b>회
+                </div>
+              </div>
+            </div>
           </div>
         </section>
         {/* 2) 현재 옵션 */}
@@ -1518,104 +1601,104 @@ export default function GemSimulator() {
           </div>
           {/* LoACore 코어행과 동일한 한 줄 카드 레이아웃 */}
           <div className="mt-3">
-<div className="
+            <div className="
   relative
   grid grid-cols-2 gap-2
   lg:flex lg:flex-row lg:flex-nowrap lg:gap-3
   items-stretch lg:items-end
   border rounded-xl p-3 bg-white overflow-visible
 ">
-  {/* 의지력 효율 ≥ */}
-  <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
-    <label className={labelCls}>의지력 효율 ≥</label>
-    <NumberInput
-      value={tgt.eff}
-      set={(v) => setTgt({ ...tgt, eff: clamp(v, MIN_STAT, MAX_STAT) })}
-      min={MIN_STAT}
-      max={MAX_STAT}
-      disabled={tgtLocked}
-    />
-  </div>
-  {/* 포인트 ≥ */}
-  <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
-    <label className={labelCls}>포인트 ≥</label>
-    <NumberInput
-      value={tgt.pts}
-      set={(v) => setTgt({ ...tgt, pts: clamp(v, MIN_STAT, MAX_STAT) })}
-      min={MIN_STAT}
-      max={MAX_STAT}
-      disabled={tgtLocked}
-    />
-  </div>
-  {/* 추가 효과 — 모바일에서 col-span-2 */}
-  <div className={`flex flex-col w-full col-span-2 lg:col-span-1 lg:w-[100px] ${tgtLocked ? "opacity-50" : ""}`}>
-    <label className={labelCls}>추가 효과</label>
-    <Dropdown
-      className="w-full lg:w-[100px]"
-      value={pos}
-      onChange={(v) => setPos(v)}
-      items={["상관 없음", "공격형", "지원형"].map(k => ({ value: k, label: k }))}
-      placeholder="추가 효과"
-      disabled={tgtLocked}
-    />
-  </div>
-  {(() => {
-    const effectsDisabled = tgtLocked || pos === "상관 없음";
-    const bLevelDisabled = effectsDisabled || abModePrimary !== "BOTH";
-    const effCls = effectsDisabled ? "opacity-50" : "";
-    const effClsB = bLevelDisabled ? "opacity-50" : "";
-    return (
-      <>
-        {/* 목표 이름 A */}
-        <div className={`w-full lg:w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
-          <label className={labelCls}>목표 효과 A</label>
-          <Select
-            value={tgtNames.aName}
-            set={(v) => setTgtNames((t) => ({ ...t, aName: v }))}
-            options={abModePrimary === "BOTH"
-              ? targetPool.filter((n) => n !== tgtNames.bName)
-              : targetPool}
-            disabled={tgtLocked || pos === "상관 없음"}
-          />
-        </div>
-        {/* A 레벨 ≥ */}
-        <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effCls}`}>
-          <label className={labelCls}>{tgtALabel}</label>
-          <NumberInput
-            value={tgt.aLvl}
-            set={(v) => setTgt({ ...tgt, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-            min={MIN_STAT}
-            max={MAX_STAT}
-            disabled={effectsDisabled}
-          />
-        </div>
-        {/* 목표 이름 B (BOTH일 때만 활성) */}
-        <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
-          <label className={labelCls}>목표 효과 B</label>
-          <Select
-            value={tgtNames.bName}
-            set={(v) => setTgtNames((t) => ({ ...t, bName: v }))}
-            options={abModePrimary === "BOTH"
-              ? targetPool.filter((n) => n !== tgtNames.aName)
-              : targetPool}
-            disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
-          />
-        </div>
-        {/* B 레벨 ≥ */}
-        <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effClsB}`}>
-          <label className={labelCls}>{tgtBLabel}</label>
-          <NumberInput
-            value={tgt.bLvl}
-            set={(v) => setTgt({ ...tgt, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
-            min={MIN_STAT}
-            max={MAX_STAT}
-            disabled={bLevelDisabled}
-          />
-        </div>
-      </>
-    );
-  })()}
-</div>
+              {/* 의지력 효율 ≥ */}
+              <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>의지력 효율 ≥</label>
+                <NumberInput
+                  value={tgt.eff}
+                  set={(v) => setTgt({ ...tgt, eff: clamp(v, MIN_STAT, MAX_STAT) })}
+                  min={MIN_STAT}
+                  max={MAX_STAT}
+                  disabled={tgtLocked}
+                />
+              </div>
+              {/* 포인트 ≥ */}
+              <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${tgtLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>포인트 ≥</label>
+                <NumberInput
+                  value={tgt.pts}
+                  set={(v) => setTgt({ ...tgt, pts: clamp(v, MIN_STAT, MAX_STAT) })}
+                  min={MIN_STAT}
+                  max={MAX_STAT}
+                  disabled={tgtLocked}
+                />
+              </div>
+              {/* 추가 효과 — 모바일에서 col-span-2 */}
+              <div className={`flex flex-col w-full col-span-2 lg:col-span-1 lg:w-[100px] ${tgtLocked ? "opacity-50" : ""}`}>
+                <label className={labelCls}>추가 효과</label>
+                <Dropdown
+                  className="w-full lg:w-[100px]"
+                  value={pos}
+                  onChange={(v) => setPos(v)}
+                  items={["상관 없음", "공격형", "지원형"].map(k => ({ value: k, label: k }))}
+                  placeholder="추가 효과"
+                  disabled={tgtLocked}
+                />
+              </div>
+              {(() => {
+                const effectsDisabled = tgtLocked || pos === "상관 없음";
+                const bLevelDisabled = effectsDisabled || abModePrimary !== "BOTH";
+                const effCls = effectsDisabled ? "opacity-50" : "";
+                const effClsB = bLevelDisabled ? "opacity-50" : "";
+                return (
+                  <>
+                    {/* 목표 이름 A */}
+                    <div className={`w-full lg:w-[160px] flex flex-col ${tgtLocked || pos === "상관 없음" ? "opacity-50" : ""}`}>
+                      <label className={labelCls}>목표 효과 A</label>
+                      <Select
+                        value={tgtNames.aName}
+                        set={(v) => setTgtNames((t) => ({ ...t, aName: v }))}
+                        options={abModePrimary === "BOTH"
+                          ? targetPool.filter((n) => n !== tgtNames.bName)
+                          : targetPool}
+                        disabled={tgtLocked || pos === "상관 없음"}
+                      />
+                    </div>
+                    {/* A 레벨 ≥ */}
+                    <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effCls}`}>
+                      <label className={labelCls}>{tgtALabel}</label>
+                      <NumberInput
+                        value={tgt.aLvl}
+                        set={(v) => setTgt({ ...tgt, aLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+                        min={MIN_STAT}
+                        max={MAX_STAT}
+                        disabled={effectsDisabled}
+                      />
+                    </div>
+                    {/* 목표 이름 B (BOTH일 때만 활성) */}
+                    <div className={`w-full lg:w-[160px] flex flex-col ${(tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH") ? "opacity-50" : ""}`}>
+                      <label className={labelCls}>목표 효과 B</label>
+                      <Select
+                        value={tgtNames.bName}
+                        set={(v) => setTgtNames((t) => ({ ...t, bName: v }))}
+                        options={abModePrimary === "BOTH"
+                          ? targetPool.filter((n) => n !== tgtNames.aName)
+                          : targetPool}
+                        disabled={tgtLocked || pos === "상관 없음" || abModePrimary !== "BOTH"}
+                      />
+                    </div>
+                    {/* B 레벨 ≥ */}
+                    <div className={`flex flex-col w-full lg:w-[120px] lg:flex-none ${effClsB}`}>
+                      <label className={labelCls}>{tgtBLabel}</label>
+                      <NumberInput
+                        value={tgt.bLvl}
+                        set={(v) => setTgt({ ...tgt, bLvl: clamp(v, MIN_STAT, MAX_STAT) })}
+                        min={MIN_STAT}
+                        max={MAX_STAT}
+                        disabled={bLevelDisabled}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </section>
         <div className="mt-3 grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
@@ -1935,8 +2018,9 @@ export default function GemSimulator() {
                       {/* STOP_ON_SUCCESS */}
                       <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
                         <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-500">달성 즉시 가공 완료</div>
-                        </div>
+                          <div className="text-xs text-gray-500">
+                            달성 즉시 가공 완료 ( {fmtNum(resultStop.successes)}회 / {fmtNum(resultStop.trialsUsed)}회 )
+                          </div>                        </div>
                         <div className="mt-1 text-2xl font-bold">
                           {fmtProbSmart(resultStop.successProb, resultStop.ci)}
                         </div>
@@ -1948,14 +2032,30 @@ export default function GemSimulator() {
                             className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
                           />
                         </div>
-                        <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                          평균 골드: <b>{fmtNum(Math.round(resultStop.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
-                        </div>
+                        {(() => {
+                          const gps = goldPerSuccess(resultStop.expectedGold, resultStop.successProb);
+                          const badge = burdenBadge(resultStop.successProb);
+                          return (
+                            <div className="mt-2 text-xs text-gray-700 flex items-center gap-2 flex-wrap">
+                              <span>
+                                성공 1회 <b>기대비용</b>: <b>{Number.isFinite(gps) ? fmtNum(Math.round(gps)) : "∞"}</b> G
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-lg border ${badge.tone}`}>
+                                골드부담: {badge.label}
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                (확률이 낮을수록 기대비용이 커집니다)
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                       {/* RUN_TO_END */}
                       <div className="rounded-xl border p-3 bg-white/60 backdrop-blur-sm">
                         <div className="flex items-center justify-between">
-                          <div className="text-xs text-gray-500">가공 횟수 전부 소모</div>
+                          <div className="text-xs text-gray-500">
+                            가공 횟수 전부 소모 ( {fmtNum(resultRun.successes)}회 / {fmtNum(resultRun.trialsUsed)}회 )
+                          </div>
                         </div>
                         <div className="mt-1 text-2xl font-bold">{fmtProb(resultRun.successProb)}</div>
                         <div className="mt-2 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
@@ -1966,9 +2066,23 @@ export default function GemSimulator() {
                             className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
                           />
                         </div>
-                        <div className="mt-2 text-xs text-gray-600 flex items-center gap-1">
-                          평균 골드: <b>{fmtNum(Math.round(resultRun.expectedGold))}</b> G ({fmtNum(Math.max(resultRun?.trialsUsed || 0, resultStop?.trialsUsed || 0))}회 평균)
-                        </div>
+                        {(() => {
+                          const gps = goldPerSuccess(resultRun.expectedGold, resultRun.successProb);
+                          const badge = burdenBadge(resultRun.successProb);
+                          return (
+                            <div className="mt-2 text-xs text-gray-700 flex items-center gap-2 flex-wrap">
+                              <span>
+                                성공 1회 <b>기대비용</b>: <b>{Number.isFinite(gps) ? fmtNum(Math.round(gps)) : "∞"}</b> G
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-lg border ${badge.tone}`}>
+                                골드부담: {badge.label}
+                              </span>
+                              <span className="text-[11px] text-gray-500">
+                                (확률이 낮을수록 기대비용이 커집니다)
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </motion.div>
@@ -1982,53 +2096,78 @@ export default function GemSimulator() {
                     <div className="text-sm font-semibold flex items-center gap-2">
                       등급 확률
                     </div>
-                    <div className="mt-3 space-y-3 text-sm">
-                      {/* 전설 */}
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-700">전설 (4~15)</span>
-                          <b>{fmtProb(resultRun.legendProb)}</b>
+
+                    {(() => {
+                      if (!resultRun) return null;
+
+                      // ✅ 0%도 포함해서 모두 보여준다
+                      const grades = [
+                        { key: "legendProb", name: "전설 (4~15)", p: Number(resultRun.legendProb || 0), grad: GRADE_GRADIENTS.legend },
+                        { key: "relicProb", name: "유물 (16~18)", p: Number(resultRun.relicProb || 0), grad: GRADE_GRADIENTS.relic },
+                        { key: "ancientProb", name: "고대 (19+)", p: Number(resultRun.ancientProb || 0), grad: GRADE_GRADIENTS.ancient },
+                      ];
+
+                      return (
+                        <div className="mt-3 space-y-3 text-sm">
+                          {grades.map(g => (
+                            <div key={g.key}>
+                              <div className="flex items-center justify-between">
+                                <span className="text-gray-700">{g.name}</span>
+                                <div className="flex items-center gap-2">
+                                  {/* ✅ 100%면 확정 배지 유지 */}
+                                  {isOneProb(g.p) && (
+                                    <span className="px-2 py-0.5 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-800 text-[11px]">
+                                      확정
+                                    </span>
+                                  )}
+                                  <b>{fmtProb(g.p)}</b>
+                                </div>
+                              </div>
+                              <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: isOneProb(g.p) ? "100%" : pct(g.p) /* 0%면 막대폭 0% */ }}
+                                  transition={{ type: "spring", stiffness: 260, damping: 28 }}
+                                  className="h-full bg-gradient-to-r"
+                                  style={{ backgroundImage: g.grad }}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.round(resultRun.legendProb * 100)}%` }}
-                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                          />
+                      );
+                    })()}
+
+                    {/* 확률 순서 표시: 0%만 제외, 100%는 (확정) 표기 유지 */}
+                    {(() => {
+                      const { order, comps } = rankGradeOrder(resultRun); // ← 이 함수 안에서 0% 필터 유지
+                      if (!order.length) return null;
+                      return (
+                        <div className="mt-2 rounded-xl bg-white/70">
+                          <div className="text-xs text-gray-500 mb-1">가능성 높은 순서</div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {order.map((it, idx) => (
+                              <React.Fragment key={it.key}>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border bg-white shadow-sm">
+                                  <span
+                                    className="inline-block w-2 h-2 rounded-full bg-gradient-to-r"
+                                    style={{ backgroundImage: it.grad }}
+                                  />
+                                  <span className="text-sm">
+                                    {it.label}{isOneProb(it.p) ? " (확정)" : ""}
+                                  </span>
+                                </span>
+                                {idx < order.length - 1 && (
+                                  <span className="mx-0.5 text-gray-400 select-none">
+                                    {comps[idx] === "=" ? "＝" : "＞"}
+                                  </span>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      {/* 유물 */}
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-700">유물 (16~18)</span>
-                          <b>{fmtProb(resultRun.relicProb)}</b>
-                        </div>
-                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.round(resultRun.relicProb * 100)}%` }}
-                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                          />
-                        </div>
-                      </div>
-                      {/* 고대 */}
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-700">고대 (19+)</span>
-                          <b>{fmtProb(resultRun.ancientProb)}</b>
-                        </div>
-                        <div className="mt-1 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.round(resultRun.ancientProb * 100)}%` }}
-                            transition={{ type: "spring", stiffness: 260, damping: 28 }}
-                            className="h-full bg-gradient-to-r from-[#85d8ea] to-[#a399f2]"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </motion.div>
                 </div>
               )}
