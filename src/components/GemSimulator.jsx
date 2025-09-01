@@ -68,6 +68,8 @@ const fmtNum = (n) => n.toLocaleString();
 // 확률 추정기: mle(기본), laplace, jeffreys
 function estimateRate(successes, n, method = "mle") {
   if (n <= 0) return 0;
+  // ✅ 경계 스냅: 전부 성공이면 1(=100%)로 고정
+  if (successes >= n) return 1; 
   switch (method) {
     case "laplace":   // Beta(1,1) 사전 → (s+1)/(n+2)
       return (successes + 1) / (n + 2);
