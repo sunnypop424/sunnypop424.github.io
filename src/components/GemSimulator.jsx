@@ -546,18 +546,29 @@ function useOnClickOutside(refs, handler) {
     return () => document.removeEventListener('click', listener, true);
   }, [refsArray]);
 }
-function Dropdown({ value, items, onChange, placeholder, className, disabled }) {
+function Dropdown({ 
+  value, 
+  items, 
+  onChange, 
+  placeholder, 
+  className, 
+  disabled, 
+  bordered = true // 기본값: border 있음
+}) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
   const menuRef = useRef(null);
   const menuPos = useRef({ top: 0, left: 0, width: 0 });
   const [, forceTick] = useState(0);
+
   useEffect(() => {
     const h = () => setOpen(false);
     window.addEventListener('close-all-dropdowns', h);
     return () => window.removeEventListener('close-all-dropdowns', h);
   }, []);
+
   useOnClickOutside([btnRef, menuRef], () => setOpen(false));
+
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
@@ -570,9 +581,14 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
+    return () => { 
+      window.removeEventListener("scroll", onScroll); 
+      window.removeEventListener("resize", onScroll); 
+    };
   }, [open]);
+
   const selected = items.find((i) => i.value === value);
+
   const menu = open && !disabled ? (
     <AnimatePresence>
       <motion.ul
@@ -583,7 +599,7 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
         exit={{ opacity: 0, y: -4, scale: 0.98 }}
         transition={{ duration: 0.12 }}
         style={{ position: "fixed", top: menuPos.current.top, left: menuPos.current.left, width: menuPos.current.width, zIndex: 9999 }}
-        className="rounded-xl border bg-white shadow-lg overflow-auto max-h-60"
+        className={`rounded-xl bg-white shadow-lg overflow-auto max-h-60 ${bordered ? "border" : ""}`}
       >
         {items.map((it) => (
           <li key={String(it.value)}>
@@ -600,13 +616,14 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
       </motion.ul>
     </AnimatePresence>
   ) : null;
+
   return (
     <div ref={btnRef} className={`relative min-w-0 ${className || ""}`}>
       <button
         type="button"
         onClick={() => !disabled && setOpen((v) => !v)}
         disabled={disabled}
-        className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${disabled ? "cursor-not-allowed" : ""}`}
+        className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${bordered ? "border" : ""} ${disabled ? "cursor-not-allowed" : ""}`}
       >
         <span className="truncate text-sm">{selected ? selected.label : placeholder || "선택"}</span>
         <span className="text-gray-500 text-sm select-none">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
@@ -615,6 +632,7 @@ function Dropdown({ value, items, onChange, placeholder, className, disabled }) 
     </div>
   );
 }
+
 function useToasts() {
   const [toasts, setToasts] = useState([]);
   const push = (msg, tone = "info") => {
@@ -1304,6 +1322,7 @@ export default function GemSimulator() {
                   onChange={setSimTrials}
                   items={SIM_OPTIONS}
                   placeholder="반복 수 선택"
+                  bordered={false}
                 />
               </div>
             </div>
