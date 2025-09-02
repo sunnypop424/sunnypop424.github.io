@@ -67,6 +67,7 @@ function sanitizeWeights(w) {
   return /** @type {Weights} */(base);
 }
 function scoreGemForRole(g, role, w) {
+  if (role == null) return 0; // 역할 미선택이면 유효옵션 점수는 0으로(정렬에 영향 최소화)
   const keys = role === "dealer" ? ROLE_KEYS.dealer : ROLE_KEYS.support;
   const s1 = keys.has(g.o1k) ? g.o1v * (w[g.o1k] ?? 1) : 0;
   const s2 = keys.has(g.o2k) ? g.o2v * (w[g.o2k] ?? 1) : 0;
@@ -596,7 +597,7 @@ export default function LoACoreOptimizer() {
     return loaded?.gemsByCat ?? { order: [], chaos: [] };
   });
   // (기존) 기타 상태 그대로
-  const [role, setRole] = useState("dealer");
+  const [role, setRole] = useState/** @type {Role|null} */(null);
   const [weights, setWeights] = useState({ ...DEFAULT_WEIGHTS });
   const [highlightCoreId, setHighlightCoreId] = useState(null);
   const [highlightGemId, setHighlightGemId] = useState(null);
@@ -1019,7 +1020,11 @@ export default function LoACoreOptimizer() {
                             </div>
                           );
                         })()}
-                        <div className={chip}>유효 옵션 합(<span className="font-semibold">{role === 'dealer' ? "딜러" : "서폿"}</span>) <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}</span></div>
+                        <div className={chip}>유효 옵션 합(
+                          <span className="font-semibold">
+                            {role === 'dealer' ? "딜러" : role === 'support' ? "서폿" : "역할 미선택"}
+                          </span>
+                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}</span></div>
                       </div>
                     )}
                   </div>
