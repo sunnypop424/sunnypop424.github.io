@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Edit3, Save, RotateCcw, RefreshCcw, ChevronDown, ChevronUp, Undo2, Redo2 } from "lucide-react";
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
-
 const USE_ANTITHETIC = true;   // 저분산 고정 ON
 const AUTO_SCALE_RARE = true;  // 자동 스케일업 고정 ON
 /* =========================
@@ -64,24 +63,17 @@ function fmtProbSmart(p) {
   if (x >= 1) return "100.00000%";                          // 전부 성공이면 100.00000%
   return (x * 100).toFixed(5) + "%";                        // 그 외는 5자리 고정
 }
-
-
 // 레거시 호환
 const fmtProb = (p) => fmtProbSmart(p);
 const fmtNum = (n) => n.toLocaleString();
-
-
 // 기대비용: 성공 1회 얻기 위해 드는 평균 골드 (확률이 낮을수록 ↑)
 function goldPerSuccess(expectedGold, p) {
   if (!Number.isFinite(expectedGold) || expectedGold <= 0) return 0;
   if (!Number.isFinite(p) || p <= 0) return Infinity; // 성공확률 0%면 무한대 취급
   return expectedGold / p;
 }
-
 // 퍼센트 유틸: width 계산용
 const pct = (p) => `${Math.max(0, Math.min(100, Math.round((Number(p) || 0) * 100)))}%`;
-
-
 // 시각적 뱃지(난이도): 확률이 낮을수록 "골드부담 ↑"
 function burdenBadge(p) {
   if (p >= 0.20) return { label: "낮음", tone: "bg-emerald-50 border-emerald-200 text-emerald-800" };
@@ -89,8 +81,6 @@ function burdenBadge(p) {
   if (p >= 0.01) return { label: "높음", tone: "bg-orange-50 border-orange-200 text-orange-800" };
   return { label: "매우 높음", tone: "bg-rose-50 border-rose-200 text-rose-800" };
 }
-
-
 // 확률 추정기: mle(기본), laplace, jeffreys
 function estimateRate(successes, n, method = "mle") {
   if (n <= 0) return 0;
@@ -107,7 +97,6 @@ function estimateRate(successes, n, method = "mle") {
       return successes / n;
   }
 }
-
 const OFFICIAL_RNG = true;
 /* ===== 시뮬레이션 횟수 옵션/헬퍼 ===== */
 const SIM_OPTIONS = [
@@ -116,20 +105,16 @@ const SIM_OPTIONS = [
   { value: 10000, label: "10,000회 (추천)" },
   { value: 50000, label: "50,000회 (정밀)" },
 ];
-
-
 function wilsonCI(p, n, z = 1.96) {
   const denom = 1 + (z * z) / n;
   const center = (p + (z * z) / (2 * n)) / denom;
   const margin = (z / denom) * Math.sqrt((p * (1 - p) / n) + (z * z) / (4 * n * n));
   return { low: Math.max(0, center - margin), high: Math.min(1, center + margin) };
 }
-
 // 0 successes일 때의 95% 상한 (Clopper–Pearson 근사)
 function zeroSuccessUpperBound(n, alpha = 0.05) {
   return 1 - Math.pow(alpha, 1 / n); // ~= 3/n
 }
-
 // 반복 수에 따른 수렴 기준(95% CI 반폭)과 배치 크기
 const epsilonByTrials = (n) => {
   if (n >= 200000) return 0.0001; // ±0.01%p
@@ -340,10 +325,8 @@ function evaluateFromSimulation(
     rareMaxTrials = 200000,            // (구버전 호환용)
     rareTiers = [200000], // ← 순차 확장 티어
   } = opts;
-
   // 의도 동일 (그대로)
   const desirability = (s) => needDistanceByMode(pos, abMode, s, target, gemKey, tgtNames);
-
   // ▶︎ 한 회 시뮬레이션 (특정 난수 발생기 rand를 주입)
   const simOnce = (rand) => {
     const weightedPickIndex = (arr) => {
@@ -352,7 +335,6 @@ function evaluateFromSimulation(
       for (let i = 0; i < arr.length; i++) { r -= arr[i].w; if (r <= 0) return i; }
       return arr.length - 1;
     };
-
     let s = { ...start };
     let gold = 0;
     let left = attemptsLeft;
@@ -360,7 +342,6 @@ function evaluateFromSimulation(
     let unlocked = unlockedReroll;
     let rate = costAddRate;
     let first = true;
-
     if (policy === "STOP_ON_SUCCESS" &&
       meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) {
       const score = totalScore(s);
@@ -373,7 +354,6 @@ function evaluateFromSimulation(
         expectedGold: 0,
       };
     }
-
     while (left > 0) {
       let cand = [];
       if (first && selectedFirstFour.length > 0) {
@@ -389,7 +369,6 @@ function evaluateFromSimulation(
           temp.splice(idx, 1);
         }
       }
-
       if (OFFICIAL_RNG) {
         const pick = cand[Math.floor(rand() * cand.length)];
         const res = applySlot(gemKey, pos, s, pick, rate, rand);
@@ -413,11 +392,9 @@ function evaluateFromSimulation(
         if (best && best.gain <= 0 && unlocked && rrs > 0) { rrs -= 1; first = false; continue; }
         if (best) { s = best.next; gold += best.gold; rate = best.nextRate; rrs += best.rrd; unlocked = true; }
       }
-
       left -= 1; first = false;
       if (policy === "STOP_ON_SUCCESS" && meetsTargetByMode(pos, abMode, s, target, gemKey, tgtNames)) break;
     }
-
     const score = totalScore(s);
     const g = gradeOf(score);
     return {
@@ -428,19 +405,14 @@ function evaluateFromSimulation(
       expectedGold: gold,
     };
   };
-
   // 집계 변수
   let n = 0;
   let succSum = 0, legendSum = 0, relicSum = 0, ancientSum = 0, goldSum = 0;
   let agg = { ...ZERO_VALUE, trialsUsed: 0, ci: { low: 0, high: 0, halfWidth: 0 } };
-
   // 동적으로 늘어날 수 있는 상한
   let localMaxTrials = maxTrials;
-
   // 추가: 희귀 강제 모드(0% 판독 시 일반 종료조건을 무시)
   let forceRare = false;
-
-
   // 희귀 티어 헬퍼
   const tiers = Array.isArray(rareTiers) && rareTiers.length
     ? [...rareTiers].sort((a, b) => a - b)
@@ -448,13 +420,11 @@ function evaluateFromSimulation(
   const hardCap = tiers[tiers.length - 1];
   const nextTier = (cur) => tiers.find(t => t > cur) || cur;
   const firstTier = tiers[0];
-
   const seedForTrial = (baseSeed, idx) => {
     // 32-bit 안전 시드 셔플
     const mixed = (baseSeed >>> 0) ^ (Math.imul((idx + 1) >>> 0, 2654435761) >>> 0);
     return mixed >>> 0;
   };
-
   const updateCI = () => {
     const p = succSum / Math.max(1, n);
     let ci;
@@ -472,14 +442,12 @@ function evaluateFromSimulation(
     agg.ci = ci;
     return ci;
   };
-
   while (n < localMaxTrials) {
     // 한 번에 돌릴 "스텝" 수 (안티테틱 켰으면 실제 trial 수는 최대 2배)
     const steps = batch;
     for (let i = 0; i < steps; i++) {
       // 남은 예산 확인
       if (n >= localMaxTrials) break;
-
       const trialSeed = seedForTrial(seed >>> 0, n + i);
       // 기본 경로
       const r1 = makeRNG(trialSeed);
@@ -490,7 +458,6 @@ function evaluateFromSimulation(
       ancientSum += one.ancientProb;
       goldSum += one.expectedGold;
       n += 1;
-
       // 안티테틱 페어 (같은 시드로 1-u 사용)
       if (useAntithetic && n < localMaxTrials) {
         const r2base = makeRNG(trialSeed);
@@ -504,10 +471,8 @@ function evaluateFromSimulation(
         n += 1;
       }
     }
-
     const ci = updateCI();
     const hw = ci.halfWidth || 0;
-
     // 0%면 즉시 희귀 강제 모드로 전환하고 상한을 '다음 티어'로 점프
     if (autoScaleRare && n >= minTrials && succSum === 0 && localMaxTrials < hardCap) {
       // 최초엔 최소 티어까지, 이미 티어면 다음 티어로
@@ -515,25 +480,21 @@ function evaluateFromSimulation(
       forceRare = true;   // ← 일반 조기 종료를 잠시 비활성화
       continue;
     }
-
     // 희귀사건 가드: 성공 표본 부족하면 상한을 키워 더 돌린다(점진 확장)
     const rareGuardActive =
       autoScaleRare &&
       n >= minTrials &&
       succSum < rareTargetSuccesses &&
       localMaxTrials < hardCap;
-
     if (rareGuardActive) {
       // 티어 기반 점프: 20만 → 50만 → 100만 (더 이상 티어 없으면 현 상한 유지)
       const next = localMaxTrials < firstTier ? firstTier : nextTier(localMaxTrials);
       localMaxTrials = Math.min(hardCap, next);
       continue; // 더 돌린다
     }
-
     // 일반 수렴 조건
     if (!forceRare && hw <= epsilon && n >= minTrials) break;
   }
-
   agg.trialsUsed = n;
   agg.successProb = estimateRate(succSum, n, estimator);
   agg.legendProb = estimateRate(legendSum, n, estimator);
@@ -544,15 +505,12 @@ function evaluateFromSimulation(
   agg.successes = succSum | 0;
   return agg;
 }
-
-
 // ===== 등급별 그라디언트 색상 (start를 적당히 어둡게 조정) =====
 const GRADE_GRADIENTS = {
   legend: "linear-gradient(90deg, #7A3E00, #B16800)",  // 전설: 진한 오렌지브라운 → 골드브라운
   relic: "linear-gradient(90deg, #8C2F06, #AB4102)",  // 유물: 다크 오렌지레드 → 토마토브라운
   ancient: "linear-gradient(90deg, #A67C37, #F5DFAB)",  // 고대: 중간 골드브라운 → 레몬쉬폰
 };
-
 // 등급 확률 정렬 + 부등호(>=) 체인 생성용
 function rankGradeOrder(run, eps = 0.0005) {
   if (!run) return { order: [], comps: [] };
@@ -564,7 +522,6 @@ function rankGradeOrder(run, eps = 0.0005) {
   // 0%는 표시 대상에서 제거
   arr = arr.filter(it => !isZeroProb(it.p));
   if (!arr.length) return { order: [], comps: [] };
-
   arr.sort((a, b) => b.p - a.p);
   const comps = [];
   for (let i = 0; i < arr.length - 1; i++) {
@@ -573,9 +530,6 @@ function rankGradeOrder(run, eps = 0.0005) {
   }
   return { order: arr, comps };
 }
-
-
-
 /* ===============================
    공통 UI(LoACore 스타일): Dropdown + Toast + NumberInput
    =============================== */
@@ -844,7 +798,6 @@ export default function GemSimulator() {
   const curValid = cur.aName !== cur.bName;
   // 시뮬레이션 반복 수 (Monte Carlo maxTrials)
   const [simTrials, setSimTrials] = useState(10000);
-
   const migratedRef = useRef(false); // StrictMode 중복 실행 방지(개발모드)
   useEffect(() => {
     if (migratedRef.current) return;
@@ -1171,7 +1124,6 @@ export default function GemSimulator() {
         rareTargetSuccesses: 100,
         rareTiers: [200000],
       };
-
       const stop = evaluateFromSimulation(
         gemKey, pos, abForEval, manual.state, tgt, "STOP_ON_SUCCESS",
         manual.attemptsLeft, manual.rerolls, manual.costAddRate, manual.unlocked, selectedFirstFour, seedBase + 101, tgtNames,
@@ -1344,7 +1296,6 @@ export default function GemSimulator() {
             <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
               로아 아크그리드 젬 가공 확률 계산기
             </h1>
-
             <div className="flex gap-2 w-auto ml-auto lg:ml-0 items-center">
               <span className="hidden sm:inline text-white/90 text-sm">시뮬레이션 횟수</span>
               <div className="min-w-[170px]">
@@ -1357,7 +1308,6 @@ export default function GemSimulator() {
               </div>
             </div>
           </div>
-
         </section>
         {/* 1) 기본 설정 */}
         {/* 1) 기본 설정 */}
@@ -2096,17 +2046,14 @@ export default function GemSimulator() {
                     <div className="text-sm font-semibold flex items-center gap-2">
                       등급 확률
                     </div>
-
                     {(() => {
                       if (!resultRun) return null;
-
                       // ✅ 0%도 포함해서 모두 보여준다
                       const grades = [
                         { key: "legendProb", name: "전설 (4~15)", p: Number(resultRun.legendProb || 0), grad: GRADE_GRADIENTS.legend },
                         { key: "relicProb", name: "유물 (16~18)", p: Number(resultRun.relicProb || 0), grad: GRADE_GRADIENTS.relic },
                         { key: "ancientProb", name: "고대 (19+)", p: Number(resultRun.ancientProb || 0), grad: GRADE_GRADIENTS.ancient },
                       ];
-
                       return (
                         <div className="mt-3 space-y-3 text-sm">
                           {grades.map(g => (
@@ -2137,7 +2084,6 @@ export default function GemSimulator() {
                         </div>
                       );
                     })()}
-
                     {/* 확률 순서 표시: 0%만 제외, 100%는 (확정) 표기 유지 */}
                     {(() => {
                       const { order, comps } = rankGradeOrder(resultRun); // ← 이 함수 안에서 0% 필터 유지
