@@ -1,5 +1,5 @@
 // src/components/LoACoreOptimizer.jsx
-import React, { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
+import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -147,8 +147,8 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
       const ta = thrMax(a), tb = thrMax(b);
       if (ta !== tb) return tb - ta;
       if (a.totalPoint !== b.totalPoint) return b.totalPoint - a.totalPoint;
-      if (a.totalWill !== b.totalWill) return a.totalWill - b.totalWill;
-      return b.roleSum - a.roleSum;
+      if (a.roleSum !== b.roleSum) return b.roleSum - a.roleSum; // 유효합 우선
+      return a.totalWill - b.totalWill;    
     });
     return arr.slice(0, Math.max(perCoreLimit, 10000));
   };
@@ -165,8 +165,8 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
     for (let i = 0; i < A.ptVec.length; i++) {
       if (A.ptVec[i] !== B.ptVec[i]) return A.ptVec[i] > B.ptVec[i];
     }
-    if (A.sumWill !== B.sumWill) return A.sumWill < B.sumWill;
-    if (A.roleSum !== B.roleSum) return A.roleSum > B.roleSum;
+    if (A.roleSum !== B.roleSum) return A.roleSum > B.roleSum; // 유효합 더 큰 쪽 우선
+    if (A.sumWill !== B.sumWill) return A.sumWill < B.sumWill; // 그다음 의지력 적게
     return false;
   }
 
@@ -602,6 +602,11 @@ export default function LoACoreOptimizer() {
   const [highlightCoreId, setHighlightCoreId] = useState(null);
   const [highlightGemId, setHighlightGemId] = useState(null);
   const { toasts, push, remove } = useToasts();
+  // ▼ 계산 제어(무조건 수동)
+  const [calcVersion, setCalcVersion] = useState(0);       // "계산하기" 버튼 누를 때 +1
+  const [computing, setComputing] = useState(false);       // 계산 중 로딩 플래그
+  const [stale, setStale] = useState(true);                // 결과가 최신인지 표시
+  const [priorityPicks, setPriorityPicks] = useState([]);  // 계산 결과 저장 
   // 현재 카테고리의 코어/젬만 뽑아쓰기
   const cores = coresByCat[category];
   const gems = gemsByCat[category];
@@ -609,15 +614,18 @@ export default function LoACoreOptimizer() {
   const setCores = (updater) => {
     setCoresByCat((prev) => {
       const next = typeof updater === "function" ? updater(prev[category]) : updater;
+      setStale(true);
       return { ...prev, [category]: next };
     });
   };
   const setGems = (updater) => {
     setGemsByCat((prev) => {
       const next = typeof updater === "function" ? updater(prev[category]) : updater;
+      setStale(true);
       return { ...prev, [category]: next };
     });
   };
+  useEffect(() => { setStale(true); }, [role, weights, category]);
   const moveCoreUp = (index) => setCores(prev => {
     if (index <= 0) return prev;
     const next = [...prev];
@@ -630,10 +638,32 @@ export default function LoACoreOptimizer() {
     [next[index + 1], next[index]] = [next[index], next[index + 1]];
     return next;
   });
-  const { picks: priorityPicks } = useMemo(
-    () => optimizeRoundRobinTargets(cores, gems, role, weights),
-    [cores, gems, role, weights]
-  );
+  // "계산하기" 버튼으로만 계산 실행
+  useEffect(() => {
+    if (calcVersion === 0) return;  // 아직 계산 전
+    let cancelled = false;
+    setComputing(true);
+    // 큰 입력에서도 UI 멈춤 방지를 위해 틱을 한 번 양보
+    const id = setTimeout(() => {
+      try {
+        // 필요시 후보 제한(대규모 입력 방지용, 원치 않으면 고정 300으로)
+        const perCoreLimit =
+          gems.length > 24 ? 120 :
+          gems.length > 16 ? 200 :
+          gems.length > 10 ? 260 : 300;
+        const { picks } = optimizeRoundRobinTargets(cores, gems, role, weights, perCoreLimit);
+        if (!cancelled) {
+          setPriorityPicks(picks || []);
+          setStale(false);
+        }
+      } finally {
+        if (!cancelled) setComputing(false);
+      }
+    }, 0);
+    return () => { cancelled = true; clearTimeout(id); };
+  // 수동 계산만: calcVersion이 유일한 트리거
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcVersion]);
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
     const id = uid();
@@ -992,10 +1022,45 @@ export default function LoACoreOptimizer() {
             </div>
           </div>
         </section>
+{/* 유효옵션 가중치 하단: 조용한 액션바 */}
+<div className="flex flex-col lg:flex-row lg:items-center gap-2">
+  {/* 안내 문구는 데스크톱에서만 보이게 */}
+  {!stale && (
+  <p className="text-xs text-white hidden lg:block">
+    입력을 모두 마친 뒤 <b>계산하기</b> 버튼을 눌러 결과를 확인하세요.
+  </p>
+)}
+{stale && !computing && (
+  <span className="inline-block text-[11px] px-3 py-1.5 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center lg:text-left">
+    입력값이 변경되었습니다. <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.
+  </span>
+)}
+
+  <div className="flex items-center gap-2 lg:ml-auto w-full lg:w-auto">
+
+    {/* 계산하기 버튼 — 얌전한 톤 */}
+    <button
+      type="button"
+      onClick={() => setCalcVersion(v => v + 1)}
+      disabled={computing}
+      className="h-10 w-full lg:w-[120px] px-0 lg:px-3 rounded-xl ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+    >
+      {computing ? "계산 중…" : "계산하기"}
+    </button>
+  </div>
+</div>
+
         {/* 결과 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
-          <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
+<p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
+  {computing && <p className="text-xs text-gray-600 mt-1">최적 조합 계산 중…</p>}
+  {!computing && calcVersion === 0 && (
+    <p className="text-xs text-gray-600 mt-1">아직 계산 전입니다. 상단의 <b>계산하기</b> 버튼을 눌러 주세요.</p>
+  )}
+  {!computing && stale && calcVersion > 0 && (
+    <p className="text-xs text-red-700 mt-1">입력값이 변경되었습니다. 상단의 <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.</p>
+  )}
           <div className="space-y-4 mt-2">
             {cores.map((c, i) => {
               const supply = CORE_SUPPLY[c.grade];
