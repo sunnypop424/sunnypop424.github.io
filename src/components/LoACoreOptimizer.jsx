@@ -1105,6 +1105,14 @@ export default function LoACoreOptimizer() {
                       {/* Desktop table */}
                       <div className="hidden lg:block overflow-x-auto mt-2">
                         <table className="min-w-full text-sm">
+                          <colgroup>
+                            <col width={"13%"}/>
+                            <col width={"13%"}/>
+                            <col width={"13%"}/>
+                            <col width={"24%"}/>
+                            <col width={"24%"}/>
+                            <col width={"13%"}/>
+                          </colgroup>
                           <thead>
                             <tr className="text-left text-gray-500">
                               <th className="px-2 py-2">선택</th>
