@@ -38,6 +38,15 @@ const ROLE_KEYS = {
   support: new Set(["brand", "allyDmg", "allyAtk"]),
 };
 const DEFAULT_WEIGHTS = { atk: 1, add: 1, boss: 1, brand: 1, allyDmg: 1, allyAtk: 1 };
+// 딜러 가중치: y ≈ slope * level (원점 통과 회귀 추정)
+const DEALER_WEIGHTS = {
+  boss: 0.07870909,
+  add: 0.06018182,
+  atk: 0.03407273,
+  brand: 0,
+  allyDmg: 0,
+  allyAtk: 0,
+};
 const CORE_NAME_ITEMS = [
   { value: "해 코어", label: "해 코어" },
   { value: "달 코어", label: "달 코어" },
@@ -148,7 +157,7 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
       if (ta !== tb) return tb - ta;
       if (a.totalPoint !== b.totalPoint) return b.totalPoint - a.totalPoint;
       if (a.roleSum !== b.roleSum) return b.roleSum - a.roleSum; // 유효합 우선
-      return a.totalWill - b.totalWill;    
+      return a.totalWill - b.totalWill;
     });
     return arr.slice(0, Math.max(perCoreLimit, 10000));
   };
@@ -232,15 +241,15 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
         picksAcc[coreIdx] = pick;
 
         thrVec[pos] = t;
-        ptVec[pos]  = pick.totalPoint;
+        ptVec[pos] = pick.totalPoint;
 
         backtrack(
           pos + 1,
           picksAcc,
-          sumThrAcc   + t,
+          sumThrAcc + t,
           sumPointAcc + pick.totalPoint,
-          sumWillAcc  + pick.totalWill,
-          roleSumAcc  + pick.roleSum,
+          sumWillAcc + pick.totalWill,
+          roleSumAcc + pick.roleSum,
           thrVec,
           ptVec
         );
@@ -249,7 +258,7 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
         pick.list.forEach(g => used.delete(g.id));
         picksAcc[coreIdx] = prev;
         thrVec[pos] = 0;
-        ptVec[pos]  = 0;
+        ptVec[pos] = 0;
       }
 
       // 비강제는 빈 선택 허용
@@ -285,7 +294,7 @@ function optimizeRoundRobinTargets(cores, pool, role, weights, perCoreLimit = 30
     return { picks: bestFull.picks };
   }
 
-  
+
   // 1.5) (신규) 전역해가 없으면: 우선순위 최하 코어를 "없는 코어"로 간주하고 재시도
   //      - 최하 코어는 화면상 맨 아래: order[order.length - 1]
   //      - 이 코어는 blocked 처리(항상 empty), 강제 조건도 무시
@@ -605,7 +614,8 @@ export default function LoACoreOptimizer() {
   // ▼ 계산 제어(무조건 수동)
   const [calcVersion, setCalcVersion] = useState(0);       // "계산하기" 버튼 누를 때 +1
   const [computing, setComputing] = useState(false);       // 계산 중 로딩 플래그
-  const [stale, setStale] = useState(true);                // 결과가 최신인지 표시
+  const [stale, setStale] = useState(false);                // 결과가 최신인지 표시
+  const didMountRef = useRef(false);
   const [priorityPicks, setPriorityPicks] = useState([]);  // 계산 결과 저장 
   // 현재 카테고리의 코어/젬만 뽑아쓰기
   const cores = coresByCat[category];
@@ -625,7 +635,10 @@ export default function LoACoreOptimizer() {
       return { ...prev, [category]: next };
     });
   };
-  useEffect(() => { setStale(true); }, [role, weights, category]);
+  useEffect(() => {
+    if (!didMountRef.current) { didMountRef.current = true; return; } // 첫 마운트 스킵
+    setStale(true);
+  }, [role, weights, category]);
   const moveCoreUp = (index) => setCores(prev => {
     if (index <= 0) return prev;
     const next = [...prev];
@@ -649,8 +662,8 @@ export default function LoACoreOptimizer() {
         // 필요시 후보 제한(대규모 입력 방지용, 원치 않으면 고정 300으로)
         const perCoreLimit =
           gems.length > 24 ? 120 :
-          gems.length > 16 ? 200 :
-          gems.length > 10 ? 260 : 300;
+            gems.length > 16 ? 200 :
+              gems.length > 10 ? 260 : 300;
         const { picks } = optimizeRoundRobinTargets(cores, gems, role, weights, perCoreLimit);
         if (!cancelled) {
           setPriorityPicks(picks || []);
@@ -661,8 +674,8 @@ export default function LoACoreOptimizer() {
       }
     }, 0);
     return () => { cancelled = true; clearTimeout(id); };
-  // 수동 계산만: calcVersion이 유일한 트리거
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 수동 계산만: calcVersion이 유일한 트리거
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcVersion]);
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
@@ -983,7 +996,8 @@ export default function LoACoreOptimizer() {
                 checked={role === "dealer"}
                 onChange={() => {
                   setRole("dealer");
-                  setWeights((w) => maskWeightsForRole(w, "dealer"));
+                  // 주신 딜 증가량을 그대로 반영 (선형 확장)
+                  setWeights({ ...DEALER_WEIGHTS });
                 }}
                 className="accent-primary"
               />
@@ -1013,7 +1027,7 @@ export default function LoACoreOptimizer() {
                     onChange={(v) => setWeights((w) => ({ ...w, [k]: (v) }))}
                     min={0}
                     max={5}
-                    step={0.0001}
+                    step={0.0000001}
                     allowFloat={true}
                     className="h-10 w-full px-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50"
                   />
@@ -1022,45 +1036,37 @@ export default function LoACoreOptimizer() {
             </div>
           </div>
         </section>
-{/* 유효옵션 가중치 하단: 조용한 액션바 */}
-<div className="flex flex-col lg:flex-row lg:items-center gap-2">
-  {/* 안내 문구는 데스크톱에서만 보이게 */}
-  {!stale && (
-  <p className="text-xs text-white hidden lg:block">
-    입력을 모두 마친 뒤 <b>계산하기</b> 버튼을 눌러 결과를 확인하세요.
-  </p>
-)}
-{stale && !computing && (
-  <span className="inline-block text-[11px] px-3 py-1.5 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center lg:text-left">
-    입력값이 변경되었습니다. <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.
-  </span>
-)}
+        {/* 유효옵션 가중치 하단: 조용한 액션바 */}
+        <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+          {/* 안내 문구는 데스크톱에서만 보이게 */}
+          {stale && !computing && calcVersion > 0 && (
+            <span className="inline-block text-[11px] px-3 py-1.5 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center lg:text-left">
+              입력값이 변경되었습니다. <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.
+            </span>
+          )}
 
-  <div className="flex items-center gap-2 lg:ml-auto w-full lg:w-auto">
+          <div className="flex items-center gap-2 lg:ml-auto w-full lg:w-auto">
 
-    {/* 계산하기 버튼 — 얌전한 톤 */}
-    <button
-      type="button"
-      onClick={() => setCalcVersion(v => v + 1)}
-      disabled={computing}
-      className="h-10 w-full lg:w-[120px] px-0 lg:px-3 rounded-xl ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
-    >
-      {computing ? "계산 중…" : "계산하기"}
-    </button>
-  </div>
-</div>
+            {/* 계산하기 버튼 — 얌전한 톤 */}
+            <button
+              type="button"
+              onClick={() => setCalcVersion(v => v + 1)}
+              disabled={computing}
+              className="h-10 w-full lg:w-[120px] px-0 lg:px-3 rounded-xl ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+            >
+              {computing ? "계산 중…" : "계산하기"}
+            </button>
+          </div>
+        </div>
 
         {/* 결과 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
-<p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
-  {computing && <p className="text-xs text-gray-600 mt-1">최적 조합 계산 중…</p>}
-  {!computing && calcVersion === 0 && (
-    <p className="text-xs text-gray-600 mt-1">아직 계산 전입니다. 상단의 <b>계산하기</b> 버튼을 눌러 주세요.</p>
-  )}
-  {!computing && stale && calcVersion > 0 && (
-    <p className="text-xs text-red-700 mt-1">입력값이 변경되었습니다. 상단의 <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.</p>
-  )}
+          <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
+          {computing && <p className="text-xs text-gray-600 mt-1">최적 조합 계산 중…</p>}
+          {!computing && stale && calcVersion > 0 && (
+            <p className="text-xs text-red-700 mt-1">입력값이 변경되었습니다. 우측 상단의 <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.</p>
+          )}
           <div className="space-y-4 mt-2">
             {cores.map((c, i) => {
               const supply = CORE_SUPPLY[c.grade];
@@ -1085,11 +1091,8 @@ export default function LoACoreOptimizer() {
                             </div>
                           );
                         })()}
-                        <div className={chip}>유효 옵션 합(
-                          <span className="font-semibold">
-                            {role === 'dealer' ? "딜러" : role === 'support' ? "서폿" : "역할 미선택"}
-                          </span>
-                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}</span></div>
+                        <div className={chip}>{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "}
+                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}%</span></div>
                       </div>
                     )}
                   </div>
@@ -1109,7 +1112,7 @@ export default function LoACoreOptimizer() {
                               <th className="px-2 py-2">포인트</th>
                               <th className="px-2 py-2">옵션1</th>
                               <th className="px-2 py-2">옵션2</th>
-                              <th className="px-2 py-2">유효합</th>
+                              <th className="px-2 py-2">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1123,7 +1126,7 @@ export default function LoACoreOptimizer() {
                                   <td className="px-2 py-2">{String(g.point ?? 0)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o1k]} {String(g.o1v)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o2k]} {String(g.o2v)}</td>
-                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}</td>
+                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}%</td>
                                 </tr>
                               );
                             })}
@@ -1139,7 +1142,7 @@ export default function LoACoreOptimizer() {
                             <div key={g.id} className="rounded-xl border p-3 bg-white">
                               <div className="flex items-center justify-between text-sm">
                                 <div className="font-medium">#{String(disp)}</div>
-                                <div className="text-xs text-primary">유효합 {String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(2))}</div>
+                                <div className="text-xs text-primary">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "} {String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}%</div>
                               </div>
                               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                                 <div className="text-gray-500">의지력</div>
