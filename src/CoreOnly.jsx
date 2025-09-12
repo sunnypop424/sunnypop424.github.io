@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, Navigate, NavLink } from "react-router-dom";
 import LoACoreOptimizer from "./components/LoACoreOptimizer";
 import GemSimulator from "./components/GemSimulator";
 import { ChevronUp } from "lucide-react";
+
 /**
  * CoreOnly as pages via HashRouter
  * - 해시 URL: #/core/gem, #/core/optimizer
@@ -17,7 +18,7 @@ function useNearBottom(offset = 520) {
       const scrollBottom = doc.scrollHeight - (doc.scrollTop + window.innerHeight);
       setNear(scrollBottom <= offset);
     };
-    onScroll(); // 초기 상태 반영
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
     return () => {
@@ -27,8 +28,9 @@ function useNearBottom(offset = 520) {
   }, [offset]);
   return near;
 }
+
 function TopFab() {
-  const visible = useNearBottom(520); // 아래 끝 520px 근처에서 등장
+  const visible = useNearBottom(520);
   return (
     <div className="fixed z-50 right-4 bottom-4 sm:right-6 sm:bottom-6 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)]">
       <button
@@ -48,61 +50,63 @@ function TopFab() {
     </div>
   );
 }
+
 export default function CoreOnly() {
   return (
     <HashRouter basename="/core">
       <div className="min-h-screen bg-gray-50 text-gray-900">
-<header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur">
-  <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3">
-    <nav aria-label="Core pages">
-      <ul className="mx-auto flex w-full flex-wrap justify-center gap-1 rounded-xl">
-        <li>
-          <NavLink
-            to="/gem"
-            className={({ isActive }) =>
-              [
-                "px-4 py-2 text-sm font-medium rounded-lg transition",
-                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                isActive
-                  ? "bg-[#a399f2]/10 text-[#5b54c6]" // 은은한 브랜드 틴트
-                  : "text-gray-700 hover:bg-gray-50"
-              ].join(" ")
-            }
-          >
-            젬 가공 헬퍼
-          </NavLink>
-        </li>
-        <li>
-          <NavLink
-            to="/optimizer"
-            className={({ isActive }) =>
-              [
-                "px-4 py-2 text-sm font-medium rounded-lg transition",
-                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                isActive
-                  ? "bg-[#a399f2]/10 text-[#5b54c6]"
-                  : "text-gray-700 hover:bg-gray-50"
-              ].join(" ")
-            }
-          >
-            젬 장착 헬퍼
-          </NavLink>
-        </li>
-      </ul>
-    </nav>
-  </div>
-</header>
+        <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3">
+            <nav aria-label="Core pages">
+              <ul className="mx-auto flex w-full flex-wrap justify-center gap-1 rounded-xl">
+                <li>
+                  <NavLink
+                    to="/gem"
+                    className={({ isActive }) =>
+                      [
+                        "px-4 py-2 text-sm font-medium rounded-lg transition",
+                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                        isActive ? "bg-[#a399f2]/10 text-[#5b54c6]" : "text-gray-700 hover:bg-gray-50",
+                      ].join(" ")
+                    }
+                  >
+                    젬 가공 헬퍼
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to="/optimizer"
+                    className={({ isActive }) =>
+                      [
+                        "px-4 py-2 text-sm font-medium rounded-lg transition",
+                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                        isActive ? "bg-[#a399f2]/10 text-[#5b54c6]" : "text-gray-700 hover:bg-gray-50",
+                      ].join(" ")
+                    }
+                  >
+                    젬 장착 헬퍼
+                  </NavLink>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        </header>
+
         {/* 라우트 영역 */}
         <main>
           <Routes>
+            {/* 기본 경로 보정: /#/core → /#/core/optimizer */}
+            <Route index element={<Navigate to="/optimizer" replace />} />
+
             <Route path="/gem" element={<GemSimulator />} />
             <Route path="/optimizer" element={<LoACoreOptimizer />} />
-            {/* 기본 경로 보정: /core → /core/optimizer */}
-            <Route path="*" element={<Navigate to="/gem" replace />} />
+
+            {/* 나머지 경로도 optimizer로 보정 */}
+            <Route path="*" element={<Navigate to="/optimizer" replace />} />
           </Routes>
         </main>
       </div>
-      <TopFab /> 
+      <TopFab />
     </HashRouter>
   );
 }
