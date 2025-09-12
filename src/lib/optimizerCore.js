@@ -89,7 +89,7 @@ export function scoreCombo(combo, grade, role, weights) {
   return { totalWill, totalPoint, thr, roleSum, score };
 }
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
-export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin) {
+export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin, onStep) {
   const supply = CORE_SUPPLY[grade];
   const W = sanitizeWeights(weights);
   const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
@@ -101,6 +101,7 @@ export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, en
   for (let k = 0; k <= maxPick; k++) {
     if (k === 0) { all.push({ list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 }); continue; }
     for (const combo of combinations(pool, k)) {
+      onStep && onStep(1); // 콤보 하나 평가 시작(진행률 카운트)
       const totalWill = combo.reduce((s, g) => s + (g.will || 0), 0);
       if (totalWill > supply) continue;
       const { totalPoint, thr, roleSum, score } = scoreCombo(combo, grade, role, W);

@@ -421,6 +421,7 @@ export default function LoACoreOptimizer() {
   // 계산 제어(수동)
   const [calcVersion, setCalcVersion] = useState(0);
   const [computing, setComputing] = useState(false);
+  const [progress, setProgress] = useState({ pct: 0, label: "준비 중…" });
   const [stale, setStale] = useState(false);
   const didMountRef = useRef(false);
   const [priorityPicks, setPriorityPicks] = useState([]);
@@ -484,6 +485,7 @@ export default function LoACoreOptimizer() {
 
     // 1) 스피너 즉시 커밋
     flushSync(() => setComputing(true));
+    setProgress({ pct: 0, label: "준비 중…" });
 
     // 2) 두 번의 RAF로 레이아웃/페인트 기회 확보
     const nextFrame = () => new Promise(requestAnimationFrame);
@@ -499,17 +501,29 @@ export default function LoACoreOptimizer() {
         // 메시지 핸들러
         const onMessage = (e) => {
           if (cancelled) return;
-          if (e.data?.error) {
+          const msg = e.data || {};
+          if (msg?.type === "error" || msg?.error) {
             console.error(e.data.error);
             setComputing(false);
+            setProgress({ pct: 0, label: "에러" });
             worker.removeEventListener('message', onMessage);
             return;
           }
-          const { picks } = e.data || {};
-          setPriorityPicks(picks || []);
-          setStale(false);
-          setComputing(false);
-          worker.removeEventListener('message', onMessage);
+          if (msg.type === "progress") {
+            const { done = 0, total = 1, label = "계산 중…" } = msg;
+            const pct = Math.max(0, Math.min(100, Math.floor((done / Math.max(1,total)) * 100)));
+            setProgress({ pct, label })
+            return; // 진행 중
+          }
+          if (msg.type === "result") {
+            const { picks } = msg;
+            setPriorityPicks(picks || []);
+            setStale(false);
+            setComputing(false);
+            setProgress({ pct: 100, label: "완료" });
+            worker.removeEventListener('message', onMessage);
+            return;
+          }
         };
 
         worker.addEventListener('message', onMessage);
@@ -1251,11 +1265,19 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
         <KakaoAdfit />
       </div>
 
-      {/* 전역 오버레이 스피너 (z-index 최상단) */}
+      {/* 전역 오버레이 진행바 */}
       {computing && (
-        <div className="fixed inset-0 z-[99999] bg-black/35 backdrop-blur-[1px] flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-white/80 border-t-transparent rounded-full animate-spin" aria-label="계산 중" />
-          <span className="ml-3 text-white font-semibold select-none">최적 조합 계산 중…</span>
+        <div className="fixed inset-0 z-[99999] bg-black/35 backdrop-blur-[1px] flex items-center justify-center px-6">
+          <div className="w-full max-w-md rounded-2xl bg-white/95 border shadow p-4">
+            <div className="text-sm font-medium text-gray-800 mb-2">{progress.label}</div>
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-[#a399f2] transition-[width] duration-100"
+                style={{ width: `${progress.pct}%` }}
+              />
+            </div>
+            <div className="mt-2 text-right text-xs text-gray-600">{progress.pct}%</div>
+          </div>
         </div>
       )}
     </div>
