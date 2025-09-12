@@ -1,3 +1,4 @@
+// src/workers/optimizer.worker.js
 /* eslint-env worker, es2020 */
 import { optimizeRoundRobinTargets } from "../lib/optimizerCore.js";
 

@@ -1,5 +1,4 @@
 // src/lib/optimizerCore.js
-
 /* =============================== 타입(주석용 정의) =============================== */
 /** @typedef {"dealer"|"support"} Role */
 /** @typedef {"atk"|"add"|"boss"|"brand"|"allyDmg"|"allyAtk"} OptionKey */
