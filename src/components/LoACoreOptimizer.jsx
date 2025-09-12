@@ -1,5 +1,5 @@
 // src/components/LoACoreOptimizer.jsx
-import React, { useEffect, useState, useRef, useLayoutEffect } from "react";
+import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -111,16 +111,30 @@ function useOnClickOutside(refs, handler) {
 }
 function Dropdown({ value, items, onChange, placeholder, className }) {
   const [open, setOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1); // 현재 키보드 포커스용
   const btnRef = useRef(null);
   const menuRef = useRef(null);
+  const itemRefs = useRef([]); // li>button 각각의 ref
   const menuPos = useRef({ top: 0, left: 0, width: 0 });
   const [, forceTick] = useState(0);
+  const listboxId = useRef(`dd-list-${Math.random().toString(36).slice(2)}`).current;
+
+  // 열릴 때 선택값 또는 첫 사용가능 항목으로 포커스 초기화
+  const initFocusIndex = useCallback(() => {
+    const sel = items.findIndex(i => i.value === value && !i.disabled);
+    if (sel >= 0) return sel;
+    const firstEnabled = items.findIndex(i => !i.disabled);
+    return firstEnabled >= 0 ? firstEnabled : -1;
+  }, [items, value]);
+
   useEffect(() => {
     const h = () => setOpen(false);
     window.addEventListener('close-all-dropdowns', h);
     return () => window.removeEventListener('close-all-dropdowns', h);
   }, []);
+
   useOnClickOutside([btnRef, menuRef], () => setOpen(false));
+
   useLayoutEffect(() => {
     if (!open || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
@@ -139,42 +153,153 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
       window.removeEventListener("resize", onScroll);
     };
   }, [open]);
+
+  // 열릴 때 키보드 포커스 타깃 준비 + 첫 렌더 다음 프레임에 실제 DOM 포커스
+  useEffect(() => {
+    if (!open) return;
+    setFocusedIndex(initFocusIndex());
+    // 다음 프레임에 리스트박스에 포커스 이동 (버튼 포커스가 메뉴로 남는 이슈 방지)
+    const t = requestAnimationFrame(() => {
+      const el = itemRefs.current[initFocusIndex()];
+      (el ?? menuRef.current)?.focus?.();
+    });
+    return () => cancelAnimationFrame(t);
+  }, [open, initFocusIndex]);
+
   const selected = items.find((i) => i.value === value);
+
+  // 유틸: 다음/이전 사용가능 인덱스
+  const getNextEnabled = (start, dir) => {
+    const n = items.length;
+    if (n === 0) return -1;
+    let i = start;
+    for (let step = 0; step < n; step++) {
+      i = (i + dir + n) % n;
+      if (!items[i].disabled) return i;
+    }
+    return -1;
+  };
+
+  // 버튼 키다운: 열고 닫기/첫 항목 포커스
+  const onButtonKeyDown = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const willOpen = !open;
+      if (willOpen) {
+        setOpen(true);
+        // 열리면 useEffect가 포커스 세팅
+      } else {
+        // 이미 열렸다면 이동
+        const base = focusedIndex >= 0 ? focusedIndex : initFocusIndex();
+        const next = e.key === "ArrowDown" ? getNextEnabled(base, +1) : getNextEnabled(base, -1);
+        if (next >= 0) setFocusedIndex(next);
+      }
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen(v => !v);
+    }
+  };
+
+  // 메뉴 키다운: 항목 이동/선택/닫기
+  const onMenuKeyDown = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const base = focusedIndex >= 0 ? focusedIndex : initFocusIndex();
+      const next = e.key === "ArrowDown" ? getNextEnabled(base, +1) : getNextEnabled(base, -1);
+      if (next >= 0) setFocusedIndex(next);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      const first = items.findIndex(i => !i.disabled);
+      if (first >= 0) setFocusedIndex(first);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      let last = -1;
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (!items[i].disabled) { last = i; break; }
+      }
+      if (last >= 0) setFocusedIndex(last);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const it = items[focusedIndex];
+      if (it && !it.disabled) {
+        onChange(it.value);
+        setOpen(false);
+        // 닫히면 버튼으로 포커스 복귀
+        requestAnimationFrame(() => btnRef.current?.querySelector("button")?.focus?.());
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+      requestAnimationFrame(() => btnRef.current?.querySelector("button")?.focus?.());
+    } else if (e.key === "Tab") {
+      // 탭으로 이동할 땐 자연스럽게 닫기
+      setOpen(false);
+    }
+  };
+
+  // 마우스 호버시 포커스 인덱스 업데이트(시각 일치)
+  const onItemMouseEnter = (i) => setFocusedIndex(i);
+
+  // 메뉴 DOM
   const menu = open ? (
     <AnimatePresence>
       <motion.ul
         ref={menuRef}
         key="menu"
+        role="listbox"
+        id={listboxId}
+        tabIndex={-1}
+        aria-activedescendant={focusedIndex >= 0 ? `${listboxId}-opt-${focusedIndex}` : undefined}
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.12 }}
         style={{ position: "fixed", top: menuPos.current.top, left: menuPos.current.left, width: menuPos.current.width, zIndex: 9999 }}
-        className="rounded-xl border bg-white shadow-lg overflow-auto max-h-60"
+        className="rounded-xl border bg-white shadow-lg overflow-auto max-h-60 focus:outline-none"
+        onKeyDown={onMenuKeyDown}
       >
-        {items.map((it) => (
-          <li key={String(it.value)}>
-            <button
-              type="button"
-              onClick={() => {
-                if (it.disabled) return;
-                onChange(it.value);
-                setOpen(false);
-              }}
-              aria-disabled={it.disabled ? true : undefined}
-              className={`w-full text-left px-3 py-2 text-sm ${it.disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"} ${it.value === value ? "bg-gray-100" : ""}`}
-            >
-              <span className="block truncate">{it.label}</span>
-            </button>
-          </li>
-        ))}
+        {items.map((it, i) => {
+          const isSelected = it.value === value;
+          const isActive = i === focusedIndex;
+          return (
+            <li key={String(it.value)}>
+              <button
+                ref={(el) => (itemRefs.current[i] = el)}
+                id={`${listboxId}-opt-${i}`}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onMouseEnter={() => onItemMouseEnter(i)}
+                onClick={() => {
+                  if (it.disabled) return;
+                  onChange(it.value);
+                  setOpen(false);
+                  requestAnimationFrame(() => btnRef.current?.querySelector("button")?.focus?.());
+                }}
+                aria-disabled={it.disabled ? true : undefined}
+                className={`w-full text-left px-3 py-2 text-sm
+                  ${it.disabled ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"}
+                  ${isSelected ? "bg-gray-100" : ""}
+                  ${isActive ? "outline-none ring-2 ring-[#a399f2]/40" : ""}
+                `}
+              >
+                <span className="block truncate">{it.label}</span>
+              </button>
+            </li>
+          );
+        })}
       </motion.ul>
     </AnimatePresence>
   ) : null;
+
   return (
     <div ref={btnRef} className={`relative min-w-0 ${className || ""}`}>
       <button
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        onKeyDown={onButtonKeyDown}
         onClick={() => setOpen(v => !v)}
         className="min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50"
       >
@@ -187,6 +312,7 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
     </div>
   );
 }
+
 function useToasts() {
   const [toasts, setToasts] = useState([]);
   const push = (msg) => {
@@ -290,6 +416,7 @@ export default function LoACoreOptimizer() {
   const [highlightCoreId, setHighlightCoreId] = useState(null);
   const [highlightGemId, setHighlightGemId] = useState(null);
   const { toasts, push, remove } = useToasts();
+  const [quickAddMode, setQuickAddMode] = useState(false);
 
   // 계산 제어(수동)
   const [calcVersion, setCalcVersion] = useState(0);
@@ -297,6 +424,7 @@ export default function LoACoreOptimizer() {
   const [stale, setStale] = useState(false);
   const didMountRef = useRef(false);
   const [priorityPicks, setPriorityPicks] = useState([]);
+  
 
   // 현재 카테고리별 단축
   const cores = coresByCat[category];
@@ -495,6 +623,194 @@ export default function LoACoreOptimizer() {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights });
   }, [category, coresByCat, gemsByCat, role, weights]);
 
+// === 빠른 추가 패드 (LoACoreOptimizer 내부에 선언) ===
+function QuickAddPad({ onAdd, focusOnMount = false }) {
+  const [o1k, setO1k] = useState("atk");
+  const [o2k, setO2k] = useState("add");
+  const [o1v, setO1v] = useState(0);
+  const [o2v, setO2v] = useState(0);
+  const [will, setWill] = useState(0);
+  const [point, setPoint] = useState(0);
+
+  const firstRef = useRef(null);
+  const focusAfterSubmitRef = useRef(false); // ✅ 포커스 복귀 조건 플래그
+  const WILL_INPUT_ID = "quick-pad-will-input";
+
+  // (옵션) 퀵패드가 켜질 때만 최초 1회 포커싱하고 싶다면 true로
+  useEffect(() => {
+    if (!focusOnMount) return;
+    requestAnimationFrame(() => {
+      firstRef.current?.focus?.();
+      firstRef.current?.select?.();
+    });
+  }, [focusOnMount]);
+
+  const focusWill = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (firstRef.current) {
+          try { firstRef.current.focus(); firstRef.current.select?.(); return; } catch {}
+        }
+        const el = document.getElementById(WILL_INPUT_ID);
+        if (el) { el.focus(); el.select?.(); }
+      });
+    });
+  };
+
+  const handleSubmit = (e) => {
+    e?.preventDefault?.();
+    const id = uid();
+    onAdd({
+      id,
+      will: Number.isFinite(will) ? will : 0,
+      point: Number.isFinite(point) ? point : 0,
+      o1k,
+      o1v: Number.isFinite(o1v) ? o1v : 0,
+      o2k,
+      o2v: Number.isFinite(o2v) ? o2v : 0,
+    });
+
+    // ✅ 엔터/버튼으로 제출한 경우에만 포커스 복귀
+    if (focusAfterSubmitRef.current) {
+      focusWill();
+      focusAfterSubmitRef.current = false;
+    }
+  };
+
+  // 엔터로 제출할 때만 플래그 ON
+  const onKeyDownSubmit = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      focusAfterSubmitRef.current = true; // ✅ 엔터 제출
+      handleSubmit(e);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white">
+        <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none" title="빠른 추가">
+          <Plus size={18} />
+        </div>
+
+        {/* 의지력 / 포인트 */}
+        <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
+          <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
+            <label className={labelCls}>필요 의지력</label>
+            <NumberInput
+              value={will}
+              onChange={setWill}
+              min={0}
+              max={9}
+              step={1}
+              allowFloat={false}
+              className={`${smallFieldBase} w-full lg:w-24`}
+              inputProps={{
+                id: WILL_INPUT_ID,
+                title: "의지력",
+                placeholder: "의지력",
+                onKeyDown: onKeyDownSubmit,
+                ref: firstRef,
+              }}
+            />
+          </div>
+          <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
+            <label className={labelCls}>(질서/혼돈)포인트</label>
+            <NumberInput
+              value={point}
+              onChange={setPoint}
+              min={0}
+              max={9}
+              step={1}
+              allowFloat={false}
+              className={`${smallFieldBase} w-full lg:w-24`}
+              inputProps={{ title: "포인트", placeholder: "포인트", onKeyDown: onKeyDownSubmit }}
+            />
+          </div>
+        </div>
+
+        {/* 옵션 1 */}
+        <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
+          <div className="flex-1 lg:flex-none min-w-0">
+            <label className={labelCls}>옵션 1</label>
+            <Dropdown
+              className="w-full lg:w-44"
+              value={o1k}
+              onChange={(v) => setO1k(v)}
+              items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
+              placeholder="옵션 선택"
+            />
+          </div>
+          <div className="flex-1 lg:flex-none">
+            <label className={labelCls}>수치</label>
+            <NumberInput
+              value={o1v}
+              onChange={setO1v}
+              min={0}
+              max={9}
+              step={1}
+              allowFloat={false}
+              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+              inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+            />
+          </div>
+        </div>
+
+        {/* 옵션 2 */}
+        <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
+          <div className="flex-1 lg:flex-none min-w-0">
+            <label className={labelCls}>옵션 2</label>
+            <Dropdown
+              className="w-full lg:w-44"
+              value={o2k}
+              onChange={(v) => setO2k(v)}
+              items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
+              placeholder="옵션 선택"
+            />
+          </div>
+          <div className="flex-1 lg:flex-none">
+            <label className={labelCls}>수치</label>
+            <NumberInput
+              value={o2v}
+              onChange={setO2v}
+              min={0}
+              max={9}
+              step={1}
+              allowFloat={false}
+              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+              inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+            />
+          </div>
+        </div>
+
+        {/* 액션 */}
+        <div className="top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
+          <button
+            type="submit"
+            // ✅ 버튼 클릭으로 제출할 때만 포커스 복귀 플래그 ON
+            onClick={() => { focusAfterSubmitRef.current = true; }}
+            className="h-10 w-full lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+            title="Enter로도 추가 가능"
+          >
+            <Plus size={16} />
+            <span className="inline"> 젬 추가</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="relative flex items-center my-4">
+        <div className="flex-grow border-t"></div>
+        <span className="mx-3 text-sm text-gray-600">
+          아래에서 추가한 젬들을 확인하세요.
+        </span>
+        <div className="flex-grow border-t"></div>
+      </div>
+    </form>
+  );
+}
+
+
+
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{
       backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)",
@@ -612,13 +928,55 @@ export default function LoACoreOptimizer() {
 
         {/* 젬 입력 */}
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
-          <div className="flex items-center gap-2 lg:gap-3 mb-3">
+          <div
+            className={`flex items-center gap-2 lg:gap-3 ${quickAddMode ? '' : 'mb-3'}`}
+          >
             <h2 className={sectionTitle}>{CATEGORY_LABEL[category]} 젬 입력</h2>
+            {/* 빠르게 추가 모드 스위치 */}
+            <div className="flex items-center gap-2 ml-1">
+              <span className="text-xs text-gray-600">빠르게 추가</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={quickAddMode}
+                onClick={() => setQuickAddMode(v => !v)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                  quickAddMode ? "bg-[#a399f2]" : "bg-gray-300"
+                }`}
+                aria-label="빠르게 추가 모드"
+              >
+                <span
+                  className={`inline-block h-4 w-5 transform rounded-full bg-white shadow transition ${
+                    quickAddMode ? "translate-x-5" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
             <div className="flex gap-2 ml-auto whitespace-nowrap">
-              <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={addGem} aria-label="젬 추가"><Plus size={16} /><span className="hidden lg:inline"> 젬 추가</span></button>
+              {!quickAddMode && (
+                <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={addGem} aria-label="젬 추가"><Plus size={16} /><span className="hidden lg:inline"> 젬 추가</span></button>
+              )}
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={() => setGems([])} aria-label="전체 삭제"><Trash2 size={16} /><span className="hidden lg:inline"> 전체 삭제</span></button>
             </div>
           </div>
+          {quickAddMode && (
+          <p className="text-[11px] text-gray-500 mb-3">
+            Tab 키로 입력 칸을 이동할 수 있고, Enter 키로 빠르게 추가할 수 있습니다.
+          </p>
+          )}
+            {/* 빠른 추가 패드 */}
+            {quickAddMode && (
+            <div className="mb-3">
+              <QuickAddPad
+                autoFocus
+                onAdd={(gem) => {
+                  setGems(v => [gem, ...v]);     // 맨 위로 추가
+                  setHighlightGemId(gem.id);     // 하이라이트
+                  setStale(true);                // 재계산 유도
+                }}
+              />
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             {gems.map((g, idx) => (
               <div key={g.id} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white ${g.id === highlightGemId ? 'LoA-highlight' : ''}`}>
