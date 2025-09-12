@@ -1,27 +1,27 @@
 {
   "files": {
-    "main.css": "/static/css/main.15e67e50.css",
-    "main.js": "/static/js/main.9c882f2d.js",
+    "main.css": "/static/css/main.51b0f5a5.css",
+    "main.js": "/static/js/main.86c83d39.js",
     "static/css/433.cbe847a7.chunk.css": "/static/css/433.cbe847a7.chunk.css",
-    "static/js/433.fc3c77b2.chunk.js": "/static/js/433.fc3c77b2.chunk.js",
+    "static/js/433.959dcef3.chunk.js": "/static/js/433.959dcef3.chunk.js",
     "static/css/815.770bcaeb.chunk.css": "/static/css/815.770bcaeb.chunk.css",
     "static/js/815.e5bdb809.chunk.js": "/static/js/815.e5bdb809.chunk.js",
     "static/js/453.f9536f7c.chunk.js": "/static/js/453.f9536f7c.chunk.js",
-    "static/js/290.ea35cedd.chunk.js": "/static/js/290.ea35cedd.chunk.js",
+    "static/js/290.5d94d426.chunk.js": "/static/js/290.5d94d426.chunk.js",
     "static/js/100.9f7390c1.chunk.js": "/static/js/100.9f7390c1.chunk.js",
     "index.html": "/index.html",
-    "main.15e67e50.css.map": "/static/css/main.15e67e50.css.map",
-    "main.9c882f2d.js.map": "/static/js/main.9c882f2d.js.map",
+    "main.51b0f5a5.css.map": "/static/css/main.51b0f5a5.css.map",
+    "main.86c83d39.js.map": "/static/js/main.86c83d39.js.map",
     "433.cbe847a7.chunk.css.map": "/static/css/433.cbe847a7.chunk.css.map",
-    "433.fc3c77b2.chunk.js.map": "/static/js/433.fc3c77b2.chunk.js.map",
+    "433.959dcef3.chunk.js.map": "/static/js/433.959dcef3.chunk.js.map",
     "815.770bcaeb.chunk.css.map": "/static/css/815.770bcaeb.chunk.css.map",
     "815.e5bdb809.chunk.js.map": "/static/js/815.e5bdb809.chunk.js.map",
     "453.f9536f7c.chunk.js.map": "/static/js/453.f9536f7c.chunk.js.map",
-    "290.ea35cedd.chunk.js.map": "/static/js/290.ea35cedd.chunk.js.map",
+    "290.5d94d426.chunk.js.map": "/static/js/290.5d94d426.chunk.js.map",
     "100.9f7390c1.chunk.js.map": "/static/js/100.9f7390c1.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.15e67e50.css",
-    "static/js/main.9c882f2d.js"
+    "static/css/main.51b0f5a5.css",
+    "static/js/main.86c83d39.js"
   ]
 }
