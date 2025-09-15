@@ -1,9 +1,10 @@
 // src/components/LoACoreOptimizer.jsx
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
-import { createPortal, flushSync } from "react-dom";
+import { createPortal } from "react-dom";
 import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { useOptimizer } from '../hooks/useOptimizer';
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
 
@@ -418,31 +419,22 @@ export default function LoACoreOptimizer() {
   const { toasts, push, remove } = useToasts();
   const [quickAddMode, setQuickAddMode] = useState(false);
 
-  // 계산 제어(수동)
-  const [calcVersion, setCalcVersion] = useState(0);
-  const [computing, setComputing] = useState(false);
-  const [progress, setProgress] = useState({ pct: 0, label: "준비 중…" });
+
   const [stale, setStale] = useState(false);
   const didMountRef = useRef(false);
-  const [priorityPicks, setPriorityPicks] = useState([]);
-  
 
   // 현재 카테고리별 단축
   const cores = coresByCat[category];
   const gems = gemsByCat[category];
-
-  // Web Worker 핸들
-  const workerRef = useRef(null);
-
-  // 워커 초기화/해제
+  // ✅ [추가] 커스텀 훅을 호출하여 계산 관련 로직을 모두 위임합니다.
+  const { isComputing, progress, results, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights);
+  
+  // ✅ [추가] 계산 결과(results)가 바뀔 때마다 stale 상태를 false로 업데이트합니다.
   useEffect(() => {
-    // Vite/CRA 모두 호환되는 URL 패턴
-    workerRef.current = new Worker(new URL('../workers/optimizer.worker.js', import.meta.url), { type: 'module' });
-    return () => {
-      workerRef.current?.terminate();
-      workerRef.current = null;
-    };
-  }, []);
+    if (results && results.length > 0) {
+      setStale(false);
+    }
+  }, [results]);
 
   // 현재 카테고리에 대해서만 set 하는 헬퍼
   const setCores = (updater) => {
@@ -477,76 +469,6 @@ export default function LoACoreOptimizer() {
     [next[index + 1], next[index]] = [next[index], next[index + 1]];
     return next;
   });
-
-  // ==== 무거운 계산 → Web Worker로 비동기 이관 + 스피너 확실히 표시 ====
-  useEffect(() => {
-    if (calcVersion === 0) return;
-    let cancelled = false;
-
-    // 1) 스피너 즉시 커밋
-    flushSync(() => setComputing(true));
-    setProgress({ pct: 0, label: "준비 중…" });
-
-    // 2) 두 번의 RAF로 레이아웃/페인트 기회 확보
-    const nextFrame = () => new Promise(requestAnimationFrame);
-
-    (async () => {
-      try {
-        await nextFrame();
-        await nextFrame();
-
-        const worker = workerRef.current;
-        if (!worker) throw new Error("Worker not initialized");
-
-        // 메시지 핸들러
-        const onMessage = (e) => {
-          if (cancelled) return;
-          const msg = e.data || {};
-          if (msg?.type === "error" || msg?.error) {
-            console.error(e.data.error);
-            setComputing(false);
-            setProgress({ pct: 0, label: "에러" });
-            worker.removeEventListener('message', onMessage);
-            return;
-          }
-          if (msg.type === "progress") {
-            const { done = 0, total = 1, label = "계산 중…" } = msg;
-            const pct = Math.max(0, Math.min(100, Math.floor((done / Math.max(1,total)) * 100)));
-            setProgress({ pct, label })
-            return; // 진행 중
-          }
-          if (msg.type === "result") {
-            const { picks } = msg;
-            setPriorityPicks(picks || []);
-            setStale(false);
-            setComputing(false);
-            setProgress({ pct: 100, label: "완료" });
-            worker.removeEventListener('message', onMessage);
-            return;
-          }
-        };
-
-        worker.addEventListener('message', onMessage);
-
-        // 후보 제한(대규모 입력 방지용)
-        const perCoreLimit =
-          gems.length > 24 ? 120 :
-          gems.length > 16 ? 200 :
-          gems.length > 10 ? 260 : 300;
-
-        // 3) 워커에 작업 위임
-        worker.postMessage({ cores, gems, role, weights, perCoreLimit });
-      } catch (err) {
-        if (!cancelled) {
-          console.error(err);
-          setComputing(false);
-        }
-      }
-    })();
-
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calcVersion]);
 
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
@@ -637,193 +559,191 @@ export default function LoACoreOptimizer() {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights });
   }, [category, coresByCat, gemsByCat, role, weights]);
 
-// === 빠른 추가 패드 (LoACoreOptimizer 내부에 선언) ===
-function QuickAddPad({ onAdd, focusOnMount = false }) {
-  const [o1k, setO1k] = useState("atk");
-  const [o2k, setO2k] = useState("add");
-  const [o1v, setO1v] = useState(0);
-  const [o2v, setO2v] = useState(0);
-  const [will, setWill] = useState(0);
-  const [point, setPoint] = useState(0);
+  // === 빠른 추가 패드 (LoACoreOptimizer 내부에 선언) ===
+  function QuickAddPad({ onAdd, focusOnMount = false }) {
+    const [o1k, setO1k] = useState("atk");
+    const [o2k, setO2k] = useState("add");
+    const [o1v, setO1v] = useState(0);
+    const [o2v, setO2v] = useState(0);
+    const [will, setWill] = useState(0);
+    const [point, setPoint] = useState(0);
 
-  const firstRef = useRef(null);
-  const focusAfterSubmitRef = useRef(false); // ✅ 포커스 복귀 조건 플래그
-  const WILL_INPUT_ID = "quick-pad-will-input";
+    const firstRef = useRef(null);
+    const focusAfterSubmitRef = useRef(false); // ✅ 포커스 복귀 조건 플래그
+    const WILL_INPUT_ID = "quick-pad-will-input";
 
-  // (옵션) 퀵패드가 켜질 때만 최초 1회 포커싱하고 싶다면 true로
-  useEffect(() => {
-    if (!focusOnMount) return;
-    requestAnimationFrame(() => {
-      firstRef.current?.focus?.();
-      firstRef.current?.select?.();
-    });
-  }, [focusOnMount]);
-
-  const focusWill = () => {
-    requestAnimationFrame(() => {
+    // (옵션) 퀵패드가 켜질 때만 최초 1회 포커싱하고 싶다면 true로
+    useEffect(() => {
+      if (!focusOnMount) return;
       requestAnimationFrame(() => {
-        if (firstRef.current) {
-          try { firstRef.current.focus(); firstRef.current.select?.(); return; } catch {}
-        }
-        const el = document.getElementById(WILL_INPUT_ID);
-        if (el) { el.focus(); el.select?.(); }
+        firstRef.current?.focus?.();
+        firstRef.current?.select?.();
       });
-    });
-  };
+    }, [focusOnMount]);
 
-  const handleSubmit = (e) => {
-    e?.preventDefault?.();
-    const id = uid();
-    onAdd({
-      id,
-      will: Number.isFinite(will) ? will : 0,
-      point: Number.isFinite(point) ? point : 0,
-      o1k,
-      o1v: Number.isFinite(o1v) ? o1v : 0,
-      o2k,
-      o2v: Number.isFinite(o2v) ? o2v : 0,
-    });
+    const focusWill = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (firstRef.current) {
+            try { firstRef.current.focus(); firstRef.current.select?.(); return; } catch { }
+          }
+          const el = document.getElementById(WILL_INPUT_ID);
+          if (el) { el.focus(); el.select?.(); }
+        });
+      });
+    };
 
-    // ✅ 엔터/버튼으로 제출한 경우에만 포커스 복귀
-    if (focusAfterSubmitRef.current) {
-      focusWill();
-      focusAfterSubmitRef.current = false;
-    }
-  };
+    const handleSubmit = (e) => {
+      e?.preventDefault?.();
+      const id = uid();
+      onAdd({
+        id,
+        will: Number.isFinite(will) ? will : 0,
+        point: Number.isFinite(point) ? point : 0,
+        o1k,
+        o1v: Number.isFinite(o1v) ? o1v : 0,
+        o2k,
+        o2v: Number.isFinite(o2v) ? o2v : 0,
+      });
 
-  // 엔터로 제출할 때만 플래그 ON
-  const onKeyDownSubmit = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      focusAfterSubmitRef.current = true; // ✅ 엔터 제출
-      handleSubmit(e);
-    }
-  };
+      // ✅ 엔터/버튼으로 제출한 경우에만 포커스 복귀
+      if (focusAfterSubmitRef.current) {
+        focusWill();
+        focusAfterSubmitRef.current = false;
+      }
+    };
 
-  return (
-    <form onSubmit={handleSubmit}>
-      <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white">
-        <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none" title="빠른 추가">
-          <Plus size={18} />
+    // 엔터로 제출할 때만 플래그 ON
+    const onKeyDownSubmit = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        focusAfterSubmitRef.current = true; // ✅ 엔터 제출
+        handleSubmit(e);
+      }
+    };
+
+    return (
+      <form onSubmit={handleSubmit}>
+        <div className="relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white">
+          <div className="h-10 w-10 flex items-center justify-center text-base font-semibold text-gray-800 bg-gray-100 rounded-xl flex-none" title="빠른 추가">
+            <Plus size={18} />
+          </div>
+
+          {/* 의지력 / 포인트 */}
+          <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
+            <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
+              <label className={labelCls}>필요 의지력</label>
+              <NumberInput
+                value={will}
+                onChange={setWill}
+                min={0}
+                max={9}
+                step={1}
+                allowFloat={false}
+                className={`${smallFieldBase} w-full lg:w-24`}
+                inputProps={{
+                  id: WILL_INPUT_ID,
+                  title: "의지력",
+                  placeholder: "의지력",
+                  onKeyDown: onKeyDownSubmit,
+                  ref: firstRef,
+                }}
+              />
+            </div>
+            <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
+              <label className={labelCls}>(질서/혼돈)포인트</label>
+              <NumberInput
+                value={point}
+                onChange={setPoint}
+                min={0}
+                max={9}
+                step={1}
+                allowFloat={false}
+                className={`${smallFieldBase} w-full lg:w-24`}
+                inputProps={{ title: "포인트", placeholder: "포인트", onKeyDown: onKeyDownSubmit }}
+              />
+            </div>
+          </div>
+
+          {/* 옵션 1 */}
+          <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
+            <div className="flex-1 lg:flex-none min-w-0">
+              <label className={labelCls}>옵션 1</label>
+              <Dropdown
+                className="w-full lg:w-44"
+                value={o1k}
+                onChange={(v) => setO1k(v)}
+                items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
+                placeholder="옵션 선택"
+              />
+            </div>
+            <div className="flex-1 lg:flex-none">
+              <label className={labelCls}>수치</label>
+              <NumberInput
+                value={o1v}
+                onChange={setO1v}
+                min={0}
+                max={9}
+                step={1}
+                allowFloat={false}
+                className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+                inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+              />
+            </div>
+          </div>
+
+          {/* 옵션 2 */}
+          <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
+            <div className="flex-1 lg:flex-none min-w-0">
+              <label className={labelCls}>옵션 2</label>
+              <Dropdown
+                className="w-full lg:w-44"
+                value={o2k}
+                onChange={(v) => setO2k(v)}
+                items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
+                placeholder="옵션 선택"
+              />
+            </div>
+            <div className="flex-1 lg:flex-none">
+              <label className={labelCls}>수치</label>
+              <NumberInput
+                value={o2v}
+                onChange={setO2v}
+                min={0}
+                max={9}
+                step={1}
+                allowFloat={false}
+                className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
+                inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+              />
+            </div>
+          </div>
+
+          {/* 액션 */}
+          <div className="top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
+            <button
+              type="submit"
+              // ✅ 버튼 클릭으로 제출할 때만 포커스 복귀 플래그 ON
+              onClick={() => { (focusAfterSubmitRef.current = true); }}
+              className="h-10 w-full lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+              title="Enter로도 추가 가능"
+            >
+              <Plus size={16} />
+              <span className="inline"> 젬 추가</span>
+            </button>
+          </div>
         </div>
 
-        {/* 의지력 / 포인트 */}
-        <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
-          <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
-            <label className={labelCls}>필요 의지력</label>
-            <NumberInput
-              value={will}
-              onChange={setWill}
-              min={0}
-              max={9}
-              step={1}
-              allowFloat={false}
-              className={`${smallFieldBase} w-full lg:w-24`}
-              inputProps={{
-                id: WILL_INPUT_ID,
-                title: "의지력",
-                placeholder: "의지력",
-                onKeyDown: onKeyDownSubmit,
-                ref: firstRef,
-              }}
-            />
-          </div>
-          <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
-            <label className={labelCls}>(질서/혼돈)포인트</label>
-            <NumberInput
-              value={point}
-              onChange={setPoint}
-              min={0}
-              max={9}
-              step={1}
-              allowFloat={false}
-              className={`${smallFieldBase} w-full lg:w-24`}
-              inputProps={{ title: "포인트", placeholder: "포인트", onKeyDown: onKeyDownSubmit }}
-            />
-          </div>
+        {/* Divider */}
+        <div className="relative flex items-center my-4">
+          <div className="flex-grow border-t"></div>
+          <span className="mx-3 text-sm text-gray-600">
+            아래에서 추가한 젬들을 확인하세요.
+          </span>
+          <div className="flex-grow border-t"></div>
         </div>
-
-        {/* 옵션 1 */}
-        <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
-          <div className="flex-1 lg:flex-none min-w-0">
-            <label className={labelCls}>옵션 1</label>
-            <Dropdown
-              className="w-full lg:w-44"
-              value={o1k}
-              onChange={(v) => setO1k(v)}
-              items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
-              placeholder="옵션 선택"
-            />
-          </div>
-          <div className="flex-1 lg:flex-none">
-            <label className={labelCls}>수치</label>
-            <NumberInput
-              value={o1v}
-              onChange={setO1v}
-              min={0}
-              max={9}
-              step={1}
-              allowFloat={false}
-              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-              inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
-            />
-          </div>
-        </div>
-
-        {/* 옵션 2 */}
-        <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
-          <div className="flex-1 lg:flex-none min-w-0">
-            <label className={labelCls}>옵션 2</label>
-            <Dropdown
-              className="w-full lg:w-44"
-              value={o2k}
-              onChange={(v) => setO2k(v)}
-              items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))}
-              placeholder="옵션 선택"
-            />
-          </div>
-          <div className="flex-1 lg:flex-none">
-            <label className={labelCls}>수치</label>
-            <NumberInput
-              value={o2v}
-              onChange={setO2v}
-              min={0}
-              max={9}
-              step={1}
-              allowFloat={false}
-              className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-              inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
-            />
-          </div>
-        </div>
-
-        {/* 액션 */}
-        <div className="top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
-          <button
-            type="submit"
-            // ✅ 버튼 클릭으로 제출할 때만 포커스 복귀 플래그 ON
-            onClick={() => { focusAfterSubmitRef.current = true; }}
-            className="h-10 w-full lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
-            title="Enter로도 추가 가능"
-          >
-            <Plus size={16} />
-            <span className="inline"> 젬 추가</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Divider */}
-      <div className="relative flex items-center my-4">
-        <div className="flex-grow border-t"></div>
-        <span className="mx-3 text-sm text-gray-600">
-          아래에서 추가한 젬들을 확인하세요.
-        </span>
-        <div className="flex-grow border-t"></div>
-      </div>
-    </form>
-  );
-}
-
-
+      </form>
+    );
+  }
 
   return (
     <div className="min-h-screen text-gray-900 p-4 lg:p-6" style={{
@@ -837,6 +757,8 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
         .text-primary{ color:#a399f2; }
         .accent-primary{ accent-color:#a399f2; }
         .ring-primary:focus{ outline:none; box-shadow:0 0 0 2px rgba(163,153,242,.35); }
+        @keyframes loa-marquee { 0%{ transform: translateX(-100%);} 100%{ transform: translateX(300%);} }
+        .animate-loa-marquee{ animation: loa-marquee 1.2s cubic-bezier(.4,0,.2,1) infinite; }
       `}</style>
       <style>{`button{cursor:pointer}`}</style>
 
@@ -954,15 +876,13 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
                 role="switch"
                 aria-checked={quickAddMode}
                 onClick={() => setQuickAddMode(v => !v)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                  quickAddMode ? "bg-[#a399f2]" : "bg-gray-300"
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${quickAddMode ? "bg-[#a399f2]" : "bg-gray-300"
+                  }`}
                 aria-label="빠르게 추가 모드"
               >
                 <span
-                  className={`inline-block h-4 w-5 transform rounded-full bg-white shadow transition ${
-                    quickAddMode ? "translate-x-5" : "translate-x-1"
-                  }`}
+                  className={`inline-block h-4 w-5 transform rounded-full bg-white shadow transition ${quickAddMode ? "translate-x-5" : "translate-x-1"
+                    }`}
                 />
               </button>
             </div>
@@ -974,12 +894,12 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
             </div>
           </div>
           {quickAddMode && (
-          <p className="text-[11px] text-gray-500 mb-3">
-            Tab 키로 입력 칸을 이동할 수 있고, Enter 키로 빠르게 추가할 수 있습니다.
-          </p>
+            <p className="text-[11px] text-gray-500 mb-3">
+              Tab 키로 입력 칸을 이동할 수 있고, Enter 키로 빠르게 추가할 수 있습니다.
+            </p>
           )}
-            {/* 빠른 추가 패드 */}
-            {quickAddMode && (
+          {/* 빠른 추가 패드 */}
+          {quickAddMode && (
             <div className="mb-3">
               <QuickAddPad
                 autoFocus
@@ -1127,7 +1047,7 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
 
         {/* 하단 계산 액션/알림 */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-2">
-          {stale && !computing && calcVersion > 0 && (
+          {stale && !isComputing && hasCalculated && (
             <span className="inline-block text-[11px] px-3 py-1.5 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center lg:text-left">
               입력값이 변경되었습니다. <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.
             </span>
@@ -1135,11 +1055,11 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
           <div className="flex items-center gap-2 lg:ml-auto w-full lg:w-auto">
             <button
               type="button"
-              onClick={() => setCalcVersion(v => v + 1)}
-              disabled={computing}
+              onClick={calculate}
+              disabled={isComputing}
               className="h-10 w-full lg:w-[120px] px-0 lg:px-3 rounded-xl ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
             >
-              {computing ? "계산 중…" : "계산하기"}
+              {isComputing ? "계산 중…" : "계산하기"}
             </button>
           </div>
         </div>
@@ -1148,13 +1068,13 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
         <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
           <h2 className={sectionTitle}>결과</h2>
           <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
-          {!computing && stale && calcVersion > 0 && (
+          {!isComputing && stale && hasCalculated && (
             <p className="text-xs text-red-700 mt-1">입력값이 변경되었습니다. 우측 상단의 <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.</p>
           )}
           <div className="space-y-4 mt-2">
             {cores.map((c, i) => {
               const supply = CORE_SUPPLY[c.grade];
-              const pick = priorityPicks?.[i];
+              const pick = results?.[i];
               const hasResult = !!(pick && pick.list && pick.list.length > 0);
               const minOfGrade = Math.min(...CORE_THRESHOLDS[c.grade]);
               return (
@@ -1266,17 +1186,31 @@ function QuickAddPad({ onAdd, focusOnMount = false }) {
       </div>
 
       {/* 전역 오버레이 진행바 */}
-      {computing && (
+      {isComputing && (
         <div className="fixed inset-0 z-[99999] bg-black/35 backdrop-blur-[1px] flex items-center justify-center px-6">
           <div className="w-full max-w-md rounded-2xl bg-white/95 border shadow p-4">
             <div className="text-sm font-medium text-gray-800 mb-2">{progress.label}</div>
-            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#a399f2] transition-[width] duration-100"
-                style={{ width: `${progress.pct}%` }}
-              />
+
+            {/* 진행바 */}
+            <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
+              {progress.indeterminate ? (
+                <div className="absolute inset-0">
+                  <div className="h-full w-1/3 bg-[#a399f2] animate-loa-marquee rounded-full" />
+                </div>
+              ) : (
+                <div
+                  className="h-full bg-[#a399f2] transition-[width] duration-100"
+                  style={{ width: `${progress.pct}%` }}
+                />
+              )}
             </div>
-            <div className="mt-2 text-right text-xs text-gray-600">{progress.pct}%</div>
+
+            {/* 퍼센트 영역: 결정형이면 % / 비결정형이면 pulse 숫자 */}
+            <div className="mt-2 text-right text-xs text-gray-600">
+              {progress.indeterminate
+                ? (progress.pulse != null ? Number(progress.pulse).toLocaleString() : "")
+                : `${progress.pct}%`}
+            </div>
           </div>
         </div>
       )}
