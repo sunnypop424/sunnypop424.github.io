@@ -92,34 +92,55 @@ export function scoreCombo(combo, grade, role, weights) {
 export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin, onStep) {
   const supply = CORE_SUPPLY[grade];
   const W = sanitizeWeights(weights);
-  const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
-  const effMin = minThreshold ?? minOfGrade;
-  const effEnforce = enforceMin || minThreshold == null;
+
   /** @type {ComboInfo[]} */
   const all = [];
   const maxPick = Math.min(4, pool.length);
+
   for (let k = 0; k <= maxPick; k++) {
-    if (k === 0) { all.push({ list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 }); continue; }
+    if (k === 0) {
+      all.push({ list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 });
+      continue;
+    }
     for (const combo of combinations(pool, k)) {
-      onStep && onStep(1); // 콤보 하나 평가 시작(진행률 카운트)
+      onStep && onStep(1);
       const totalWill = combo.reduce((s, g) => s + (g.will || 0), 0);
       if (totalWill > supply) continue;
       const { totalPoint, thr, roleSum, score } = scoreCombo(combo, grade, role, W);
       all.push({ list: combo, totalWill, totalPoint, thr, roleSum, score });
     }
   }
+
   all.sort((a, b) => b.score - a.score);
+
+  // [수정] UI 변경에 맞춰 필터링 로직 전체를 새로운 로직으로 변경합니다.
   let filtered;
-  if (effEnforce) {
-    filtered = all.filter(ci => {
-      const maxThr = Math.max(0, ...ci.thr);
-      return ci.list.length > 0 && maxThr >= (effMin ?? 0);
-    });
-  } else {
-    filtered = all.filter(ci => ci.list.length > 0 && ci.thr.length > 0);
+
+  // '이상 탐색' 모드 (체크박스 ON)
+  if (enforceMin) {
+    const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
+    const effMin = minThreshold ?? minOfGrade; // 목표 설정 없으면 등급 최소치 적용
+    filtered = all.filter(ci =>
+      ci.totalPoint >= effMin && ci.thr.length > 0 && ci.list.length > 0
+    );
   }
+  // '정확히 일치' 모드 (체크박스 OFF, 기본값)
+  else {
+    // 목표 포인트가 명확히 설정된 경우
+    if (minThreshold != null) {
+      filtered = all.filter(ci =>
+        ci.totalPoint === minThreshold && ci.list.length > 0
+      );
+    }
+    // 목표 포인트 설정이 없는 경우 (가장 점수 높은 순으로)
+    else {
+      filtered = all.filter(ci => ci.thr.length > 0 && ci.list.length > 0);
+    }
+  }
+
   if (filtered.length === 0) {
     return [{ list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 }];
   }
+  
   return filtered;
 }

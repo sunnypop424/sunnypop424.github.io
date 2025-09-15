@@ -807,11 +807,10 @@ export default function LoACoreOptimizer() {
                     {cores.map((c, idx) => {
                       const supply = CORE_SUPPLY[c.grade];
                       const targetItems = [{ value: '', label: '(선택 안 함)' }].concat(
-                        CORE_THRESHOLDS[c.grade].map(v => ({ value: String(v), label: `${v}P 이상` }))
+                        CORE_THRESHOLDS[c.grade].map(v => ({ value: String(v), label: `${v}P` }))
                       );
                       const takenNames = new Set(cores.filter(x => x.id !== c.id).map(x => x.name));
                       const coreNameItems = CORE_NAME_ITEMS.map(it => ({ ...it, disabled: takenNames.has(it.value) }));
-                      const minOfGrade = Math.min(...CORE_THRESHOLDS[c.grade]);
                       return (
                         <PortalAwareDraggable key={c.id} draggableId={c.id} index={idx}>
                           {(prov) => (
@@ -831,14 +830,14 @@ export default function LoACoreOptimizer() {
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>목표 구간</label>
-                                <Dropdown className="w-full lg:w-40" value={String(c.minThreshold ?? '')} onChange={(val) => { if (val) updateCore(c.id, { minThreshold: Number(val), enforceMin: true }); else updateCore(c.id, { minThreshold: undefined, enforceMin: false }); }} items={targetItems} placeholder="구간" />
+                                <Dropdown className="w-full lg:w-40" value={String(c.minThreshold ?? '')} onChange={(val) => { if (val) updateCore(c.id, { minThreshold: Number(val) }); else updateCore(c.id, { minThreshold: undefined }); }} items={targetItems} placeholder="목표 포인트 선택" />
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <div className="flex items-center gap-2">
                                   <input id={`enf-${c.id}`} type="checkbox" className="accent-primary" checked={c.enforceMin} onChange={(e) => updateCore(c.id, { enforceMin: e.target.checked })} />
-                                  <label htmlFor={`enf-${c.id}`} className="text-sm">목표 구간 강제</label>
+                                  <label htmlFor={`enf-${c.id}`} className="text-sm">선택한 포인트 이상으로 탐색</label>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">선택 안 함이면 내부적으로 <br className="hidden lg:block" />최소 구간 <b className="text-primary">{minOfGrade}P</b>을 기본 목표로 적용합니다.</p>
+                                <p className="text-xs text-gray-500 mt-1">체크 해제 시, 목표 포인트와<br className="hidden lg:block" /><b className="text-primary">정확히 일치하는 조합만 계산</b>합니다.</p>
                               </div>
                               <div className="lg:ml-auto lg:static absolute top-2 right-2 flex items-center gap-1">
                                 <div className="hidden lg:hidden" />
