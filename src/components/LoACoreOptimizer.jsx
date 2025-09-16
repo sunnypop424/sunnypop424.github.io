@@ -24,6 +24,7 @@ import {
   thresholdsHit,
   scoreCombo,
 } from '../lib/optimizerCore.js';
+import ARC_CORES from "../data/arc_cores_select.json";
 
 /* --------------------------------------------------------------------------
  * [타입 설명 - 코드 동작과 무관한 개발자 참고 주석]
@@ -42,6 +43,31 @@ const CORE_NAME_ITEMS = [
 const CATEGORY_LABEL = { order: "질서", chaos: "혼돈" };
 const LS_KEY = "LoA-CoreOptimizer-v2";
 
+// ★ 직업/코어 그룹 매핑
+const JOBS = ARC_CORES?.jobs ?? [];
+const CORE_NAME_BY_GROUP = { "해": "해 코어", "달": "달 코어", "별": "별 코어" };
+const GROUP_BY_CORE_NAME = { "해 코어": "해", "달 코어": "달", "별 코어": "별" };
+
+// 직업별로 (해/달/별) 어떤 그룹이 있는지 -> "해 코어"/"달 코어"/"별 코어" 셋 반환
+function getAllowedCoreNameSet(job) {
+  const entries = ARC_CORES?.data?.[job] ?? [];
+  const groups = new Set(entries.map(e => e["그룹"])); // "해" | "달" | "별"
+  const names = new Set(
+    Array.from(groups).map(g => CORE_NAME_BY_GROUP[g]).filter(Boolean)
+  );
+  return names;
+}
+
+// 직업 + 그룹(해/달/별)에 해당하는 '직업 코어' 프리셋 목록
+function getPresetItems(job, groupKey /* "해"|"달"|"별" */) {
+  if (!job || !groupKey) return [];
+  const entries = ARC_CORES?.data?.[job] ?? [];
+  return entries
+    .filter(e => e["그룹"] === groupKey)
+    .map(e => ({ value: e["코어"], label: e["코어"] }));
+}
+
+
 /* =============================== 유틸/헬퍼 (UI) =============================== */
 const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
 function nextAvailableCoreName(existingNames) {
@@ -49,6 +75,14 @@ function nextAvailableCoreName(existingNames) {
   return null;
 }
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+// 등급별 목표 포인트 최대값
+const TARGET_MAX_BY_GRADE = {
+  HERO: 10,      // 영웅
+  LEGEND: 14,    // 전설
+  RELIC: 19,     // 유물
+  ANCIENT: 20,   // 고대
+};
 
 // 역할 선택 시 반대 역할 키 가중치를 0으로 마스킹
 function maskWeightsForRole(prev, role) {
@@ -110,7 +144,7 @@ function useOnClickOutside(refs, handler) {
     return () => document.removeEventListener('click', listener, true);
   }, [refsArray]);
 }
-function Dropdown({ value, items, onChange, placeholder, className }) {
+function Dropdown({ value, items, onChange, placeholder, className, bordered = true }) {
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1); // 현재 키보드 포커스용
   const btnRef = useRef(null);
@@ -256,7 +290,7 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
         exit={{ opacity: 0, y: -4 }}
         transition={{ duration: 0.12 }}
         style={{ position: "fixed", top: menuPos.current.top, left: menuPos.current.left, width: menuPos.current.width, zIndex: 9999 }}
-        className="rounded-xl border bg-white shadow-lg overflow-auto max-h-60 focus:outline-none"
+        className={`rounded-xl bg-white shadow-lg overflow-auto max-h-60 ${bordered ? "border" : ""}`}
         onKeyDown={onMenuKeyDown}
       >
         {items.map((it, i) => {
@@ -302,7 +336,7 @@ function Dropdown({ value, items, onChange, placeholder, className }) {
         aria-controls={open ? listboxId : undefined}
         onKeyDown={onButtonKeyDown}
         onClick={() => setOpen(v => !v)}
-        className="min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl border px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50"
+        className={`min-w-0 h-10 w-full inline-flex items-center justify-between rounded-xl px-3 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 ${bordered ? "border" : ""}`}
       >
         <span className="truncate text-sm">{selected ? selected.label : placeholder || "선택"}</span>
         <span className="text-gray-500 text-sm select-none">
@@ -428,7 +462,10 @@ export default function LoACoreOptimizer() {
   const gems = gemsByCat[category];
   // ✅ [추가] 커스텀 훅을 호출하여 계산 관련 로직을 모두 위임합니다.
   const { isComputing, progress, results, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights);
-  
+  // ★ 선택한 직업 (질서에서만 사용)
+  const [selectedJob, setSelectedJob] = useState(() => (loadFromStorage()?.selectedJob ?? ""));
+
+
   // ✅ [추가] 계산 결과(results)가 바뀔 때마다 stale 상태를 false로 업데이트합니다.
   useEffect(() => {
     if (results && results.length > 0) {
@@ -473,7 +510,7 @@ export default function LoACoreOptimizer() {
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
     const id = uid();
-    setGems(v => [{ id, will: null, point: null, o1k: "atk", o1v: 0, o2k: "add", o2v: 0 }, ...v]);
+    setGems(v => [{ id, will: null, point: null, o1k: "atk", o1v: null, o2k: "add", o2v: null }, ...v]);
     setHighlightGemId(id);
   };
   const removeGem = (id) => {
@@ -556,17 +593,17 @@ export default function LoACoreOptimizer() {
     runSelfTests();
   }, []);
   useEffect(() => {
-    saveToStorage({ category, coresByCat, gemsByCat, role, weights });
-  }, [category, coresByCat, gemsByCat, role, weights]);
+    saveToStorage({ category, coresByCat, gemsByCat, role, weights, selectedJob });
+  }, [category, coresByCat, gemsByCat, role, weights, selectedJob]);
 
   // === 빠른 추가 패드 (LoACoreOptimizer 내부에 선언) ===
   function QuickAddPad({ onAdd, focusOnMount = false }) {
     const [o1k, setO1k] = useState("atk");
     const [o2k, setO2k] = useState("add");
-    const [o1v, setO1v] = useState(0);
-    const [o2v, setO2v] = useState(0);
-    const [will, setWill] = useState(0);
-    const [point, setPoint] = useState(0);
+    const [o1v, setO1v] = useState(1);
+    const [o2v, setO2v] = useState(1);
+    const [will, setWill] = useState(1);
+    const [point, setPoint] = useState(1);
 
     const firstRef = useRef(null);
     const focusAfterSubmitRef = useRef(false); // ✅ 포커스 복귀 조건 플래그
@@ -635,7 +672,7 @@ export default function LoACoreOptimizer() {
               <NumberInput
                 value={will}
                 onChange={setWill}
-                min={0}
+                min={3}
                 max={9}
                 step={1}
                 allowFloat={false}
@@ -654,8 +691,8 @@ export default function LoACoreOptimizer() {
               <NumberInput
                 value={point}
                 onChange={setPoint}
-                min={0}
-                max={9}
+                min={1}
+                max={5}
                 step={1}
                 allowFloat={false}
                 className={`${smallFieldBase} w-full lg:w-24`}
@@ -681,12 +718,12 @@ export default function LoACoreOptimizer() {
               <NumberInput
                 value={o1v}
                 onChange={setO1v}
-                min={0}
-                max={9}
+                min={1}
+                max={5}
                 step={1}
                 allowFloat={false}
                 className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-                inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+                inputProps={{ placeholder: "1", onKeyDown: onKeyDownSubmit }}
               />
             </div>
           </div>
@@ -708,12 +745,12 @@ export default function LoACoreOptimizer() {
               <NumberInput
                 value={o2v}
                 onChange={setO2v}
-                min={0}
-                max={9}
+                min={1}
+                max={5}
                 step={1}
                 allowFloat={false}
                 className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-                inputProps={{ placeholder: "0", onKeyDown: onKeyDownSubmit }}
+                inputProps={{ placeholder: "1", onKeyDown: onKeyDownSubmit }}
               />
             </div>
           </div>
@@ -793,6 +830,16 @@ export default function LoACoreOptimizer() {
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>{CATEGORY_LABEL[category]} 코어 입력</h2>
             <div className="flex items-center gap-2 ml-auto whitespace-nowrap">
+              {/* 질서일 때만 직업 선택 노출 */}
+              {category === "order" && (
+                  <Dropdown
+                    className="w-32"
+                    value={selectedJob}
+                    onChange={(val) => setSelectedJob(val)}
+                    items={[{ value: "", label: "선택 안함" }, ...JOBS.map(j => ({ value: j, label: j }))]}
+                    placeholder="직업 선택"
+                  />
+              )}
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90 ring-primary" onClick={addCore} aria-label="코어 추가"><Plus size={16} /><span className="hidden lg:inline"> 코어 추가</span></button>
             </div>
           </div>
@@ -806,11 +853,27 @@ export default function LoACoreOptimizer() {
                   <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-3">
                     {cores.map((c, idx) => {
                       const supply = CORE_SUPPLY[c.grade];
+                      const gradeMax = TARGET_MAX_BY_GRADE[c.grade];
+                      const thresholds = (CORE_THRESHOLDS[c.grade] ?? []).filter(v => v <= gradeMax);
                       const targetItems = [{ value: '', label: '(선택 안 함)' }].concat(
-                        CORE_THRESHOLDS[c.grade].map(v => ({ value: String(v), label: `${v}P` }))
+                        thresholds.map(v => ({ value: String(v), label: `${v}P` }))
                       );
                       const takenNames = new Set(cores.filter(x => x.id !== c.id).map(x => x.name));
-                      const coreNameItems = CORE_NAME_ITEMS.map(it => ({ ...it, disabled: takenNames.has(it.value) }));
+                      let coreNameItems = CORE_NAME_ITEMS.map(it => ({ ...it }));
+
+                      if (category === "order" && selectedJob) {
+                        const allowed = getAllowedCoreNameSet(selectedJob); // "해/달/별 코어" 셋
+                        coreNameItems = coreNameItems.map(it => ({
+                          ...it,
+                          disabled: takenNames.has(it.value) || !allowed.has(it.value)
+                        }));
+                      } else {
+                        coreNameItems = coreNameItems.map(it => ({
+                          ...it,
+                          disabled: takenNames.has(it.value)
+                        }));
+                      }
+
                       return (
                         <PortalAwareDraggable key={c.id} draggableId={c.id} index={idx}>
                           {(prov) => (
@@ -820,17 +883,49 @@ export default function LoACoreOptimizer() {
                                 <label className={labelCls}>코어 종류</label>
                                 <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val) => updateCore(c.id, { name: val })} items={coreNameItems} placeholder="코어명" />
                               </div>
-                              <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
+                              {category === "order" && selectedJob && (
+                                (() => {
+                                  const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해"|"달"|"별"
+                                  const presetItems = getPresetItems(selectedJob, groupKey);
+                                  return (
+                                    <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
+                                      <label className={labelCls}>코어 선택</label>
+<Dropdown
+  className="w-full"
+  value={c.preset ?? (presetItems[0]?.value ?? "")} // 빈 값 방지(선택 안 함 제거됨)
+  onChange={(val) => updateCore(c.id, { preset: val })}
+  items={presetItems}
+  placeholder="직업 코어 선택"
+/>
+                                    </div>
+                                  );
+                                })()
+                              )}
+                              <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>코어 등급</label>
-                                <Dropdown className="w-full lg:w-40" value={c.grade} onChange={(val) => updateCore(c.id, { grade: /** @type {CoreGrade} */(val) })} items={GRADES.map(g => ({ value: g, label: CORE_LABEL[g] }))} placeholder="코어 등급" />
+                                <Dropdown
+                                  className="w-full lg:w-24"
+                                  value={c.grade}
+                                  onChange={(val) => {
+                                    const g = /** @type {CoreGrade} */(val);
+                                    const maxAllowed = TARGET_MAX_BY_GRADE[g];
+                                    const nextMin =
+                                      (c.minThreshold != null && c.minThreshold > maxAllowed)
+                                        ? maxAllowed
+                                        : c.minThreshold;
+                                    updateCore(c.id, { grade: g, minThreshold: nextMin });
+                                  }}
+                                  items={GRADES.map(g => ({ value: g, label: CORE_LABEL[g] }))}
+                                  placeholder="코어 등급"
+                                />
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>공급 의지력</label>
                                 <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center"><span className="text-primary font-semibold">{supply}</span></div>
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
-                                <label className={labelCls}>목표 구간</label>
-                                <Dropdown className="w-full lg:w-40" value={String(c.minThreshold ?? '')} onChange={(val) => { if (val) updateCore(c.id, { minThreshold: Number(val) }); else updateCore(c.id, { minThreshold: undefined }); }} items={targetItems} placeholder="목표 포인트 선택" />
+                                <label className={labelCls}>목표 포인트</label>
+                                <Dropdown className="w-full lg:w-32" value={String(c.minThreshold ?? '')} onChange={(val) => { if (val) updateCore(c.id, { minThreshold: Number(val) }); else updateCore(c.id, { minThreshold: undefined }); }} items={targetItems} placeholder="목표 포인트 선택" />
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <div className="flex items-center gap-2">
@@ -920,7 +1015,7 @@ export default function LoACoreOptimizer() {
                     <NumberInput
                       value={g.will}
                       onChange={(v) => updateGem(g.id, { will: v })}
-                      min={0}
+                      min={3}
                       max={9}
                       step={1}
                       allowFloat={false}
@@ -933,8 +1028,8 @@ export default function LoACoreOptimizer() {
                     <NumberInput
                       value={g.point}
                       onChange={(v) => updateGem(g.id, { point: v })}
-                      min={0}
-                      max={9}
+                      min={1}
+                      max={5}
                       step={1}
                       allowFloat={false}
                       className={`${smallFieldBase} w-full lg:w-24`}
@@ -952,12 +1047,12 @@ export default function LoACoreOptimizer() {
                     <NumberInput
                       value={g.o1v}
                       onChange={(v) => updateGem(g.id, { o1v: v })}
-                      min={0}
-                      max={9}
+                      min={1}
+                      max={5}
                       step={1}
                       allowFloat={false}
                       className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-                      inputProps={{ placeholder: "0" }}
+                      inputProps={{ placeholder: "1" }}
                     />
                   </div>
                 </div>
@@ -971,12 +1066,12 @@ export default function LoACoreOptimizer() {
                     <NumberInput
                       value={g.o2v}
                       onChange={(v) => updateGem(g.id, { o2v: v })}
-                      min={0}
-                      max={9}
+                      min={1}
+                      max={5}
                       step={1}
                       allowFloat={false}
                       className="h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white w-full lg:w-20"
-                      inputProps={{ placeholder: "0" }}
+                      inputProps={{ placeholder: "1" }}
                     />
                   </div>
                 </div>
@@ -1079,9 +1174,16 @@ export default function LoACoreOptimizer() {
               return (
                 <div key={c.id} className="border rounded-xl p-3 bg-white">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="text-base font-semibold">
-                      {c.name} <span className="text-sm text-gray-500">({CORE_LABEL[c.grade]})</span>
-                    </div>
+                  <div className="text-base font-semibold">
+                    {c.name}
+                    {/* ★ 선택한 직업 코어 표시: 질서 + 직업 선택 + 프리셋 있을 때 */}
+                    {category === "order" && selectedJob && c.preset && (
+                      <>
+                        &nbsp;:&nbsp;{c.preset}
+                      </>
+                    )}&nbsp;
+                    <span className="text-sm text-gray-500">({CORE_LABEL[c.grade]})</span>
+                  </div>
                     {hasResult && (
                       <div className="flex flex-wrap gap-2 items-center text-[12px] lg:text-[13px]">
                         <div className={chip}>총 의지력 <span className="font-semibold">{String(pick.totalWill)}</span> / 공급 <span>{String(supply)}</span> (<span>나머지 {String(supply - pick.totalWill)}</span>)</div>
@@ -1101,7 +1203,7 @@ export default function LoACoreOptimizer() {
                   </div>
                   {!hasResult ? (
                     <div className="text-sm text-gray-700 mt-2">
-                      결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 구간을 만족하지 못합니다.{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
+                      결과가 없습니다. (이 코어에 배정 가능한 조합이 없거나, 목표 포인트를 만족하지 못합니다.{c.minThreshold == null ? ` / 최소 ${minOfGrade}P 자동 적용중` : ""})
                     </div>
                   ) : (
                     <>
