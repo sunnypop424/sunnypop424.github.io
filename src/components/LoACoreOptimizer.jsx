@@ -1,7 +1,8 @@
 // src/components/LoACoreOptimizer.jsx
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, Info } from "lucide-react";
+import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, Info, Download, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useOptimizer } from '../hooks/useOptimizer';
@@ -416,14 +417,14 @@ function CoreEffectInfo({ job, groupKey, preset, grade, category, coreName, supp
   // 등급 판별: CORE_LABEL[grade] 문자열 기준 + 키 백업
   const isAncient =
     (CORE_LABEL?.[grade] ?? "").includes("고대") || String(grade).toLowerCase() === "ancient";
-    
+
   // 등급별 텍스트 색상 클래스
   const gradeColorCls =
-  String(grade).toUpperCase() === "HERO"    || (CORE_LABEL?.[grade] ?? "").includes("영웅") ? "text-fuchsia-500" :
-  String(grade).toUpperCase() === "LEGEND"  || (CORE_LABEL?.[grade] ?? "").includes("전설") ? "text-amber-500"  :
-  String(grade).toUpperCase() === "RELIC"   || (CORE_LABEL?.[grade] ?? "").includes("유물") ? "text-orange-700"  :
-  String(grade).toUpperCase() === "ANCIENT" || (CORE_LABEL?.[grade] ?? "").includes("고대") ? "text-[#d3bd8b]"   :
-  "text-gray-800";
+    String(grade).toUpperCase() === "HERO" || (CORE_LABEL?.[grade] ?? "").includes("영웅") ? "text-fuchsia-500" :
+      String(grade).toUpperCase() === "LEGEND" || (CORE_LABEL?.[grade] ?? "").includes("전설") ? "text-amber-500" :
+        String(grade).toUpperCase() === "RELIC" || (CORE_LABEL?.[grade] ?? "").includes("유물") ? "text-orange-700" :
+          String(grade).toUpperCase() === "ANCIENT" || (CORE_LABEL?.[grade] ?? "").includes("고대") ? "text-[#d3bd8b]" :
+            "text-gray-800";
 
   // "A/B%", "A%/B%", "A/B" 형태 치환 (여러 개 등장해도 전부 처리)
   const pickSlashValueByGrade = (text) => {
@@ -493,38 +494,41 @@ function CoreEffectInfo({ job, groupKey, preset, grade, category, coreName, supp
               <div className="text-[12px] font-medium">{String(supply)} 포인트</div>
             </div>
 
-          {/* 코어 옵션 (등급 최대 포인트 이하만) */}
-          <div className={LABEL_CLS}>코어 옵션</div>
-          {list.length === 0 ? (
-            <div className="text-gray-500">옵션 정보가 없습니다.</div>
-          ) : (
-            <ul className="mt-1 space-y-1">
-              {list.map((e) => {
-                const text = e.point === 17 ? pickSlashValueByGrade(e.text) : e.text;
-                return (
-                  <li
-                    key={e.point}
-                    className="grid grid-cols-[32px_1fr] gap-x-1 items-start min-w-0"
-                  >
-                    {/* 왼쪽: 포인트 (고정폭, 우측정렬) */}
-                    <span className="w-[32px] shrink-0 text-amber-500 font-semibold">
-                      [{e.point}P]
-                    </span>
-                    {/* 오른쪽: 설명 (이 컬럼에서만 줄바꿈) */}
-                    <span className="text-gray-800 break-words min-w-0">
-                      {text}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+            {/* 코어 옵션 (등급 최대 포인트 이하만) */}
+            <div className={LABEL_CLS}>코어 옵션</div>
+            {list.length === 0 ? (
+              <div className="text-gray-500">옵션 정보가 없습니다.</div>
+            ) : (
+              <ul className="mt-1 space-y-1">
+                {list.map((e) => {
+                  const text = e.point === 17 ? pickSlashValueByGrade(e.text) : e.text;
+                  return (
+                    <li
+                      key={e.point}
+                      className="grid grid-cols-[32px_1fr] gap-x-1 items-start min-w-0"
+                    >
+                      {/* 왼쪽: 포인트 (고정폭, 우측정렬) */}
+                      <span className="w-[32px] shrink-0 text-amber-500 font-semibold">
+                        [{e.point}P]
+                      </span>
+                      {/* 오른쪽: 설명 (이 컬럼에서만 줄바꿈) */}
+                      <span className="text-gray-800 break-words min-w-0">
+                        {text}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
     </span>
   );
 }
+
+
+
 
 
 function useToasts() {
@@ -631,7 +635,7 @@ export default function LoACoreOptimizer() {
   const [highlightGemId, setHighlightGemId] = useState(null);
   const { toasts, push, remove } = useToasts();
   const [quickAddMode, setQuickAddMode] = useState(false);
-
+  const [dataVersion, setDataVersion] = useState(0);
 
   const [stale, setStale] = useState(false);
   const didMountRef = useRef(false);
@@ -643,6 +647,85 @@ export default function LoACoreOptimizer() {
   const { isComputing, progress, results, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights);
   // ★ 선택한 직업 (질서에서만 사용)
   const [selectedJob, setSelectedJob] = useState(() => (loadFromStorage()?.selectedJob ?? ""));
+
+  // === JSON 백업/복원 ===
+  const fileInputRef = useRef(null);
+
+  const buildSnapshot = useCallback(() => ({
+    app: "LoA-CoreOptimizer",
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    category,
+    coresByCat,
+    gemsByCat,
+    role,
+    weights: sanitizeWeights(weights),
+    selectedJob,
+  }), [category, coresByCat, gemsByCat, role, weights, selectedJob]);
+
+  const handleExportJson = useCallback(() => {
+    try {
+      const data = buildSnapshot();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const d = new Date();
+      const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `loa_core_optimizer_${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      push("JSON 파일로 내보냈습니다.");
+    } catch (e) {
+      console.error(e);
+      push("내보내기 중 오류가 발생했어요.");
+    }
+  }, [buildSnapshot, push]);
+
+  const handleImportClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImportFile = useCallback((e) => {
+    const file = e.target.files?.[0];
+    // 같은 파일 다시 선택 가능하도록 초기화
+    e.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const json = JSON.parse(String(reader.result));
+        if (!json || typeof json !== "object") throw new Error("invalid");
+        if (!json.coresByCat || !json.gemsByCat) throw new Error("missing fields");
+        // 한 프레임에 동기 커밋해서 UI 즉시 반영
+        flushSync(() => {
+          setCoresByCat(json.coresByCat);
+          setGemsByCat(json.gemsByCat);
+          setCategory(json.category === "chaos" ? "chaos" : "order"); // 안전망
+          setRole(json.role === "dealer" || json.role === "support" ? json.role : null);
+          setWeights(json.weights ? sanitizeWeights(json.weights) : { ...DEFAULT_WEIGHTS });
+          setSelectedJob(typeof json.selectedJob === "string" ? json.selectedJob : "");
+          setHighlightCoreId(null);
+          setHighlightGemId(null);
+          setQuickAddMode(false);
+          setStale(true);
+        });
+        // DnD/입력 내부 캐시 초기화를 위한 강제 리마운트 트리거
+        setDataVersion(v => v + 1);
+        push("JSON 데이터를 불러왔습니다.");
+
+      } catch (err) {
+        console.error(err);
+        push("가져오기 실패: JSON 형식이 올바르지 않아요.");
+      }
+    };
+    reader.onerror = () => push("가져오기 실패: 파일을 읽을 수 없어요.");
+    reader.readAsText(file);
+  }, [push, setCoresByCat, setGemsByCat, setCategory, setRole, setWeights, setSelectedJob]);
+
 
 
   // ✅ [추가] 계산 결과(results)가 바뀔 때마다 stale 상태를 false로 업데이트합니다.
@@ -1013,14 +1096,42 @@ export default function LoACoreOptimizer() {
       `}</style>
       <style>{`button{cursor:pointer}`}</style>
 
-      <div className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
+      <div key={dataVersion} className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
         {/* 헤더/카테고리 토글 */}
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
               로아 아크그리드 젬 장착 도우미
             </h1>
-            <div className="flex gap-2 w-auto ml-auto lg:ml-0">
+            <div className="flex items-center gap-2 w-auto ml-auto lg:ml-0">
+              {/* │ 저장/불러오기 고정 툴바 │ */}
+              <button
+                type="button"
+                onClick={handleExportJson}
+                className="h-10 px-3 rounded-xl inline-flex items-center gap-2 bg-white hover:bg-white/90"
+                title="현재 입력값을 JSON으로 저장"
+              >
+                <Download size={16} />
+                <span className="hidden md:inline text-sm">저장하기</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleImportClick}
+                className="h-10 px-3 rounded-xl inline-flex items-center gap-2 bg-white hover:bg-white/90"
+                title="JSON에서 불러오기"
+              >
+                <Upload size={16} />
+                <span className="hidden md:inline text-sm">불러오기</span>
+              </button>
+              {/* 숨김 파일 입력(항상 마운트) */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+              <div className="h-6 w-px bg-white/50 mx-1 hidden sm:block" aria-hidden />
               <button
                 onClick={() => setCategory("order")}
                 className={`min-w-[84px] h-10 inline-flex items-center justify-center px-3 rounded-xl ${category === 'order' ? 'bg-white' : 'bg-white/70'}`}
@@ -1171,7 +1282,7 @@ export default function LoACoreOptimizer() {
                                   <input id={`enf-${c.id}`} type="checkbox" className="accent-primary" checked={c.enforceMin} onChange={(e) => updateCore(c.id, { enforceMin: e.target.checked })} />
                                   <label htmlFor={`enf-${c.id}`} className="text-sm">선택한 포인트 이상으로 탐색</label>
                                 </div>
-                                <p className="text-xs text-gray-500 mt-1">체크 해제 시, 목표 포인트와<br className="hidden lg:block" /><b className="text-primary">정확히 일치하는 조합만 계산</b>합니다.</p>
+                                <p className="text-xs text-gray-500 mt-1">체크 해제 시, 목표 포인트와 <br className="hidden lg:block" /><b className="text-primary">정확히 일치하는 조합만 계산</b>합니다.</p>
                               </div>
                               <div className="lg:ml-auto lg:static absolute top-2 right-2 flex items-center gap-1">
                                 <div className="hidden lg:hidden" />
