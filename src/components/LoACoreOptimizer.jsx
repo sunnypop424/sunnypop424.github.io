@@ -20,7 +20,7 @@
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, Info, Download, Upload } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Info, Download, Upload } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useOptimizer } from '../hooks/useOptimizer';
@@ -39,8 +39,7 @@ import {
   ROLE_KEYS,
   sanitizeWeights,
   scoreGemForRole,
-  thresholdsHit,
-  scoreCombo,
+  levelValueByRole,
 } from '../lib/optimizerCore.js';
 import ARC_CORES from "../data/arc_cores_select.json";
 
@@ -70,6 +69,7 @@ const TARGET_MAX_BY_GRADE = {
   RELIC: 19,
   ANCIENT: 20,
 };
+
 
 /* ──────────────────────────────────────────────────────────────────────────
  * C. 직업-코어 프리셋/효과 유틸
@@ -637,8 +637,22 @@ export default function LoACoreOptimizer() {
     return loaded?.gemsByCat ?? { order: [], chaos: [] };
   });
 
-  const [role, setRole] = useState(null);
-  const [weights, setWeights] = useState({ ...DEFAULT_WEIGHTS });
+  const [role, setRole] = useState(() => loadFromStorage()?.role ?? "dealer");
+  const [weights, setWeights] = useState(() => {
+    const saved = loadFromStorage();
+    const w = saved?.weights;
+    if (w && typeof w === "object") {
+      const vals = ["atk","add","boss","brand","allyDmg","allyAtk"].map(k => Number(w[k]));
+      const allOnes = vals.every(v => v === 1);
+      // 과거 기본값(전부 1)만 저장돼 있고 역할 정보가 없거나 딜러로 추정되면 → 딜러 프리셋으로 이행
+      if (allOnes && (!saved?.role || saved.role === "dealer")) {
+        return { ...DEALER_WEIGHTS };
+      }
+      return sanitizeWeights(w);
+    }
+    // 저장된 게 없으면 딜러 프리셋으로 시작
+    return { ...DEALER_WEIGHTS };
+  });
   const [highlightCoreId, setHighlightCoreId] = useState(null);
   const [highlightGemId, setHighlightGemId] = useState(null);
   const { toasts, push, remove } = useToasts();
@@ -717,7 +731,10 @@ export default function LoACoreOptimizer() {
           setGemsByCat(json.gemsByCat);
           setCategory(json.category === "chaos" ? "chaos" : "order");
           setRole(json.role === "dealer" || json.role === "support" ? json.role : null);
-          setWeights(json.weights ? sanitizeWeights(json.weights) : { ...DEFAULT_WEIGHTS });
+          setWeights(() => {
+            const r = json.role === "support" ? "support" : "dealer";
+            return r === "dealer" ? { ...DEALER_WEIGHTS } : maskWeightsForRole(DEFAULT_WEIGHTS, "support");
+          });
           setSelectedJob(typeof json.selectedJob === "string" ? json.selectedJob : "");
           setHighlightCoreId(null);
           setHighlightGemId(null);
@@ -800,7 +817,6 @@ export default function LoACoreOptimizer() {
     });
   }, [category, selectedJob, cores, setCoresByCat, setStale]);
 
-  const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
     const id = uid();
     setGems(v => [{ id, will: null, point: null, o1k: "atk", o1v: null, o2k: "add", o2v: null }, ...v]);
@@ -868,25 +884,37 @@ export default function LoACoreOptimizer() {
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
 
-  useEffect(() => {
-    function runSelfTests() {
-      try {
-        const w = sanitizeWeights({ atk: 2, add: "3", boss: -1 });
-        console.assert(w.atk === 2 && w.add === 3 && w.boss === 1, "sanitizeWeights failed");
-        const gem = { id: "t1", will: 1, point: 1, o1k: "atk", o1v: 2, o2k: "brand", o2v: 3 };
-        console.assert(scoreGemForRole(gem, "dealer", w) === 2 * w.atk, "scoreGemForRole dealer failed");
-        console.assert(scoreGemForRole(gem, "support", w) === 3 * (w.brand ?? 1), "scoreGemForRole support failed");
-        console.assert(thresholdsHit("RELIC", 20).includes(20) && thresholdsHit("RELIC", 9).length === 0, "thresholdsHit failed");
-        const cA = scoreCombo([gem], "RELIC", "dealer", w);
-        const cB = scoreCombo([gem, { ...gem, id: "t2", will: 0, point: 10 }], "RELIC", "dealer", w);
-        console.assert(cB.score >= cA.score, "scoreCombo monotonicity failed");
-        console.log("✅ Self-tests passed");
-      } catch (e) {
-        console.warn("❌ Self-tests encountered an error", e);
-      }
+useEffect(() => {
+  function runSelfTests() {
+    try {
+      // 가중치는 1배(배율)로 고정
+      const w = sanitizeWeights({ atk: 1, add: 1, boss: 1 });
+
+      // 딜러: atk L2 = 0.067%, add L3 = 0.187% -> 합 0.254%
+      const gem = { id: "t1", will: 1, point: 1, o1k: "atk", o1v: 2, o2k: "add", o2v: 3 };
+      const gotDealer = scoreGemForRole(gem, "dealer", w);
+      const expectDealer = 0.067 + 0.187;
+
+      // 부동소수 오차 허용
+      console.assert(Math.abs(gotDealer - expectDealer) < 1e-9,
+        `scoreGemForRole dealer failed: got=${gotDealer}, expect=${expectDealer}`);
+
+      // 서포터: 선형(레벨=퍼센트). brand L3 = 3%
+      const gemSup = { id: "t2", will: 1, point: 1, o1k: "brand", o1v: 3, o2k: "allyAtk", o2v: 0 };
+      const gotSupport = scoreGemForRole(gemSup, "support", w);
+      const expectSupport = 3; // 3%
+
+      console.assert(Math.abs(gotSupport - expectSupport) < 1e-9,
+        `scoreGemForRole support failed: got=${gotSupport}, expect=${expectSupport}`);
+
+      console.log("✅ Self-tests passed");
+    } catch (e) {
+      console.warn("❌ Self-tests encountered an error", e);
     }
-    runSelfTests();
-  }, []);
+  }
+  runSelfTests();
+}, []);
+
   useEffect(() => {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights, selectedJob });
   }, [category, coresByCat, gemsByCat, role, weights, selectedJob]);
@@ -1411,59 +1439,179 @@ export default function LoACoreOptimizer() {
           </div>
         </section>
 
-        <section className={`${card} p-4 lg:p-6`}>
-          <div className="flex items-center gap-2 lg:gap-3">
-            <h2 className={sectionTitle}>유효옵션 가중치</h2>
-            <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={resetWeights} aria-label="가중치 초기화"><RotateCcw size={16} /><span className="hidden lg:inline"> 가중치 초기화</span></button>
-          </div>
-          <div className={`mb-1 flex items-center gap-4 text-sm`}>
-            <span className="text-xs text-gray-500">포지션 선택</span>
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="radio"
-                name="role"
-                checked={role === "dealer"}
-                onChange={() => {
-                  setRole("dealer");
-                  setWeights({ ...DEALER_WEIGHTS });
-                }}
-                className="accent-primary"
-              />
-              딜러
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <input
-                type="radio"
-                name="role"
-                checked={role === "support"}
-                onChange={() => {
-                  setRole("support");
-                  setWeights((w) => maskWeightsForRole(w, "support"));
-                }}
-                className="accent-primary"
-              />
-              서포터
-            </label>
-          </div>
-          <div className="mt-3">
-            <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-nowrap text-sm min-w-0">
-              {OPTIONS.map((k) => (
-                <div key={k} className="bg-gray-50 border rounded-xl px-2 py-2 w-full lg:w-1/6 min-w-[120px]">
-                  <label className={labelCls}>{OPTION_LABELS[k]}</label>
-                  <NumberInput
-                    value={weights[k]}
-                    onChange={(v) => setWeights((w) => ({ ...w, [k]: (v) }))}
-                    min={0}
-                    max={5}
-                    step={0.0000001}
-                    allowFloat={true}
-                    className="h-10 w-full px-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50"
-                  />
+<section className={`${card} p-4 lg:p-6`}>
+  <div className="flex items-center gap-2 lg:gap-3">
+    <h2 className={sectionTitle}>유효 옵션 가중치</h2>
+
+  {/* 포지션 선택은 그대로 유지 */}
+  <div className={`flex items-center gap-4 text-sm`}>
+    <span className="text-xs text-gray-500">포지션 선택</span>
+    <label className="inline-flex items-center gap-2">
+      <input
+        type="radio"
+        name="role"
+        checked={role === "dealer"}
+        onChange={() => {
+          setRole("dealer");
+          setWeights({ ...DEALER_WEIGHTS });
+        }}
+        className="accent-primary"
+      />
+      딜러
+    </label>
+    <label className="inline-flex items-center gap-2">
+      <input
+        type="radio"
+        name="role"
+        checked={role === "support"}
+        onChange={() => {
+          setRole("support");
+          setWeights((w) => maskWeightsForRole(DEFAULT_WEIGHTS, "support"));
+        }}
+        className="accent-primary"
+      />
+      서포터
+    </label>
+  </div>
+  </div>
+
+
+<p className="text-[12px] text-gray-600 mt-2">
+  가중치는 역할 프리셋으로 고정됩니다. 아래는 <b>옵션 레벨 → 퍼센트 매핑</b>입니다.
+  {role === "support" && (
+    <>
+      <br />
+      <span className="text-[12px] text-rose-700">
+        서포터의 현재 유효 옵션 가중치는 정확한 값을 몰라 <b>임시로 1</b>로 넣어두었습니다.
+      </span>
+      <br />
+      <span className="text-[12px] text-rose-700">
+        정확한 수치를 아시는 분은 <b>연락 부탁드립니다.</b>
+      </span>
+    </>
+  )}
+  {role === "dealer" && (
+    <>
+      <br />
+      <span className="text-[12px] text-indigo-700">
+        딜러의 현재 유효 옵션 가중치는{" "}
+        <a
+          href="https://youtu.be/1EHrPm50_Ig?si=K31gdkMqVI0S4CLv&t=1002"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          포피셜 유튜브 영상
+        </a>
+        을 참고했습니다. <span className="text-gray-500">(약 16:42 지점)</span>
+      </span>
+    </>
+  )}
+</p>
+
+{/* 옵션별 L1~L5 퍼센트 표 (반응형) */}
+{(() => {
+  const levels = [1, 2, 3, 4, 5];
+  const allowSet =
+    role && ROLE_KEYS?.[role] && typeof ROLE_KEYS[role].has === "function"
+      ? ROLE_KEYS[role]
+      : null;
+
+  // 현재 역할에 해당하는 옵션만 노출 (역할 미선택이면 전체)
+  const showKeys = OPTIONS.filter((k) => !allowSet || allowSet.has(k));
+
+  const rows = showKeys.map((k) => {
+    const values = levels.map((L) => levelValueByRole(role, k, L));
+    const isCurve = role === "dealer"; // 딜러는 커브, 서포터는 선형
+    return { k, values, isCurve };
+  });
+
+  return (
+    <div className="mt-3">
+      {/* 데스크톱/태블릿: 표 형태 */}
+      <div className="hidden sm:block overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <colgroup>
+            <col width="18%" />
+            <col width="16%" />
+            <col width="16%" />
+            <col width="16%" />
+            <col width="16%" />
+            <col width="16%" />
+          </colgroup>
+          <thead>
+            <tr className="text-left text-gray-500">
+              <th className="py-2">옵션</th>
+              <th className="py-2">Lv. 1</th>
+              <th className="py-2">Lv. 2</th>
+              <th className="py-2">Lv. 3</th>
+              <th className="py-2">Lv. 4</th>
+              <th className="py-2">Lv. 5</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ k, values, isCurve }) => (
+              <tr key={k} className="border-t">
+                <td className="py-2">
+                  <span className="font-medium">{OPTION_LABELS[k]}</span>
+                  <span
+                    className={`ml-2 text-[11px] ${
+                      isCurve ? "text-primary" : "text-gray-400"
+                    }`}
+                  >
+                    {isCurve ? "커브" : "선형"}
+                  </span>
+                </td>
+                {values.map((v, i) => (
+                  <td key={i} className="py-2 tabular-nums">
+                    {Number(v).toFixed(3)}%
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 모바일: 카드 + 칩 형태 */}
+      <div className="sm:hidden space-y-2">
+        {rows.map(({ k, values, isCurve }) => (
+          <div key={k} className="rounded-xl border p-3 bg-white">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">{OPTION_LABELS[k]}</div>
+              <span
+                className={`text-[11px] ${
+                  isCurve ? "text-primary" : "text-gray-400"
+                }`}
+              >
+                {isCurve ? "커브" : "선형"}
+              </span>
+            </div>
+
+            {/* L1~L5 그리드: 세로 스크롤 없이 한눈에 */}
+            <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+              {values.map((v, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-gray-50 border"
+                >
+                  <span className="text-gray-500">Lv. {i + 1}</span>
+                  <span className="tabular-nums font-medium">
+                    {Number(v).toFixed(3)}%
+                  </span>
                 </div>
               ))}
             </div>
           </div>
-        </section>
+        ))}
+      </div>
+    </div>
+  );
+})()}
+
+</section>
+
+
 
         <div className="flex flex-col lg:flex-row lg:items-center gap-2">
           {stale && !isComputing && hasCalculated && (
@@ -1522,7 +1670,7 @@ export default function LoACoreOptimizer() {
                           );
                         })()}
                         <div className={chip}>{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "}
-                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(4))}%</span></div>
+                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(3))}%</span></div>
                       </div>
                     )}
                   </div>
@@ -1563,7 +1711,7 @@ export default function LoACoreOptimizer() {
                                   <td className="px-2 py-2">{String(g.point ?? 0)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o1k]} {String(g.o1v)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o2k]} {String(g.o2v)}</td>
-                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}%</td>
+                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(3))}%</td>
                                 </tr>
                               );
                             })}
@@ -1579,7 +1727,7 @@ export default function LoACoreOptimizer() {
                             <div key={g.id} className="rounded-xl border p-3 bg-white">
                               <div className="flex items-center justify-between text-sm">
                                 <div className="font-medium">#{String(disp)}</div>
-                                <div className="text-xs text-primary">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "} {String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(4))}%</div>
+                                <div className="text-xs text-primary">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "} {String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(3))}%</div>
                               </div>
                               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
                                 <div className="text-gray-500">의지력</div>

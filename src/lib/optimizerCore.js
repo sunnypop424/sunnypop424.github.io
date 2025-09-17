@@ -31,18 +31,37 @@ export const ROLE_KEYS = {
   dealer: new Set(["atk", "add", "boss"]),
   support: new Set(["brand", "allyDmg", "allyAtk"]),
 };
-export const DEFAULT_WEIGHTS = { atk: 1, add: 1, boss: 1, brand: 1, allyDmg: 1, allyAtk: 1 };
-// 딜러 가중치: y ≈ slope * level (원점 통과 회귀 추정)
+
+/** 딜러 프리셋(가중치; 배율) */
 export const DEALER_WEIGHTS = {
-  boss: 0.07870909,
-  add: 0.06018182,
-  atk: 0.03407273,
+  boss: 1,
+  add: 1,
+  atk: 1,
   brand: 0,
   allyDmg: 0,
   allyAtk: 0,
 };
+/** 기본 가중치는 = 딜러 프리셋 */
+export const DEFAULT_WEIGHTS = { ...DEALER_WEIGHTS };
+
+/** 딜러: 옵션 레벨 → 퍼센트 커브 */
+export const DEALER_LEVEL_CURVES = {
+  // key 는 OPTIONS 의 실제 키와 일치해야 합니다.
+  boss: [0, 0.078, 0.156, 0.244, 0.313, 0.391], // 보스 피해
+  add:  [0, 0.060, 0.119, 0.187, 0.239, 0.299], // 추가 피해
+  atk:  [0, 0.029, 0.067, 0.105, 0.134, 0.172], // 공격력
+};
 
 /* =============================== 유틸/헬퍼 =============================== */
+export function roleAllowsKey(role, key) {
+  const allow = ROLE_KEYS?.[role];
+  if (!allow) return true;                               // 미정의면 모두 허용
+  if (Array.isArray(allow)) return allow.includes(key);  // 배열
+  if (allow && typeof allow.has === 'function') return allow.has(key); // Set
+  if (allow && typeof allow === 'object') return !!allow[key]; // { atk:true } 객체
+  return true;
+}
+
 export function sanitizeWeights(w) {
   const base = { ...DEFAULT_WEIGHTS };
   if (!w) return base;
@@ -53,13 +72,36 @@ export function sanitizeWeights(w) {
   });
   return /** @type {Weights} */(base);
 }
-export function scoreGemForRole(g, role, w) {
-  if (role == null) return 0; // 역할 미선택이면 유효옵션 점수 0
-  const keys = role === "dealer" ? ROLE_KEYS.dealer : ROLE_KEYS.support;
-  const s1 = keys.has(g.o1k) ? (g.o1v ?? 0) * (w[g.o1k] ?? 1) : 0;
-  const s2 = keys.has(g.o2k) ? (g.o2v ?? 0) * (w[g.o2k] ?? 1) : 0;
-  return s1 + s2;
+
+export function levelValueByRole(role, key, lvl) {
+  const L = Math.max(0, Math.min(5, Number(lvl) || 0));
+  if (role === 'dealer' && DEALER_LEVEL_CURVES[key]) {
+    return DEALER_LEVEL_CURVES[key][L] || 0;
+  }
+  // 서포터(및 그 외): 선형 — 레벨 숫자 자체를 퍼센트로 사용
+  return L;
 }
+
+export function scoreGemForRole(gem, role, weights) {
+  const w = sanitizeWeights(weights || {});
+  let sum = 0;
+
+  const add = (key, lvl) => {
+    if (!key || !lvl) return;
+    if (role && !roleAllowsKey(role, key)) return;
+
+    const basePct = levelValueByRole(role, key, lvl); // 레벨→퍼센트(커브/선형)
+    const scale   = w[key] ?? 0;                      // 가중치(배율)
+    sum += basePct * scale;
+  };
+
+  add(gem.o1k, gem.o1v);
+  add(gem.o2k, gem.o2v);
+
+  // 퍼센트 값으로 반환 (상위 UI에서 toFixed(4) + '%' 처리)
+  return sum;
+}
+
 export function* combinations(arr, k) {
   const n = arr.length; if (k > n) return;
   const idx = Array.from({ length: k }, (_, i) => i);
@@ -72,10 +114,12 @@ export function* combinations(arr, k) {
     for (let j = p + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
   }
 }
+
 export function thresholdsHit(grade, totalPoint) {
   const th = CORE_THRESHOLDS[grade];
   return th.filter(t => totalPoint >= t);
 }
+
 export function scoreCombo(combo, grade, role, weights) {
   const totalWill = combo.reduce((s, g) => s + ((g.will ?? 0)), 0);
   const totalPoint = combo.reduce((s, g) => s + ((g.point ?? 0)), 0);
@@ -88,6 +132,7 @@ export function scoreCombo(combo, grade, role, weights) {
     - combo.length;
   return { totalWill, totalPoint, thr, roleSum, score };
 }
+
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
 export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin, onStep) {
   const supply = CORE_SUPPLY[grade];
@@ -113,27 +158,24 @@ export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, en
 
   all.sort((a, b) => b.score - a.score);
 
-  // [수정] UI 변경에 맞춰 필터링 로직 전체를 새로운 로직으로 변경합니다.
+  // UI 정책에 맞춘 필터링
   let filtered;
 
-  // '이상 탐색' 모드 (체크박스 ON)
   if (enforceMin) {
+    // '이상 탐색' 모드 (체크박스 ON)
     const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
-    const effMin = minThreshold ?? minOfGrade; // 목표 설정 없으면 등급 최소치 적용
+    const effMin = minThreshold ?? minOfGrade; // 목표가 없으면 등급 최소치
     filtered = all.filter(ci =>
       ci.totalPoint >= effMin && ci.thr.length > 0 && ci.list.length > 0
     );
-  }
-  // '정확히 일치' 모드 (체크박스 OFF, 기본값)
-  else {
-    // 목표 포인트가 명확히 설정된 경우
+  } else {
+    // '정확히 일치' 모드 (체크박스 OFF, 기본)
     if (minThreshold != null) {
       filtered = all.filter(ci =>
         ci.totalPoint === minThreshold && ci.list.length > 0
       );
-    }
-    // 목표 포인트 설정이 없는 경우 (가장 점수 높은 순으로)
-    else {
+    } else {
+      // 목표 없음: 달성 구간 있는 케이스만
       filtered = all.filter(ci => ci.thr.length > 0 && ci.list.length > 0);
     }
   }
@@ -141,6 +183,6 @@ export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, en
   if (filtered.length === 0) {
     return [{ list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 }];
   }
-  
+
   return filtered;
 }
