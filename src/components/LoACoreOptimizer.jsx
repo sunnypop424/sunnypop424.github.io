@@ -663,26 +663,34 @@ export default function LoACoreOptimizer() {
     selectedJob,
   }), [category, coresByCat, gemsByCat, role, weights, selectedJob]);
 
-  const handleExportJson = useCallback(() => {
-    try {
-      const data = buildSnapshot();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const d = new Date();
-      const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `loa_core_optimizer_${stamp}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      push("JSON 파일로 내보냈습니다.");
-    } catch (e) {
-      console.error(e);
-      push("내보내기 중 오류가 발생했어요.");
-    }
-  }, [buildSnapshot, push]);
+const handleExportJson = useCallback(() => {
+  try {
+    const data = buildSnapshot();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+
+    // 직업명이 있을 때만 파일명에 추가 (불가 문자는 제거)
+    const jobPart =
+      selectedJob && selectedJob.trim()
+        ? `_${selectedJob.trim().replace(/[\\/:*?"<>|]+/g, "")}`
+        : "";
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `아크그리드${jobPart}_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    push("JSON 파일로 내보냈습니다.");
+  } catch (e) {
+    console.error(e);
+    push("내보내기 중 오류가 발생했어요.");
+  }
+}, [buildSnapshot, push, selectedJob]);
+
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
