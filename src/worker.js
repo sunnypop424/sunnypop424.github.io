@@ -1,3 +1,19 @@
+// worker.js (Cloudflare Workers)
+
+// ---- 간단 디둡 메모리 (동일 워커 인스턴스 내 15초 캐시) ----
+const seen = new Map();
+// ★ 허용할 meta 키만 받기 (나머지는 무시)
+const ALLOWED_META_KEYS = new Set(["role", "category"]); // 필요시 키 추가
+function dedupeCheck(id, ttlMs = 15_000) {
+  if (!id) return false;
+  const now = Date.now();
+  // 청소
+  for (const [k, exp] of seen) if (exp < now) seen.delete(k);
+  if (seen.has(id)) return true;
+  seen.set(id, now + ttlMs);
+  return false;
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("origin") || "";
@@ -27,41 +43,49 @@ export default {
     const ctype = (request.headers.get("content-type") || "").toLowerCase();
 
     try {
-      // 공통 제한
+      // 제한
       const MAX_FILES = 4;
       const PER_FILE  = 4 * 1024 * 1024;   // 4MB
       const TOTAL     = 16 * 1024 * 1024;  // 16MB
       const okTypes   = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-      // 공통 임베드 생성기
-      const makeBaseEmbed = (title, content, meta) => {
+        // 공통 임베드 생성기 (화이트리스트만 허용)
+        const makeBaseEmbed = (title, content, meta) => {
         const embed = {
-          title: `문의: ${String(title || "").slice(0, 80)}`,
-          description: String(content || "").slice(0, 4000),
-          color: 0xa399f2,
-          fields: [],
-          timestamp: new Date().toISOString(),
+            title: `문의: ${String(title || "").slice(0, 80)}`,
+            description: String(content || "").slice(0, 4000),
+            color: 0xa399f2,
+            fields: [],
+            timestamp: new Date().toISOString(),
         };
+
         const m = meta || {};
-        Object.keys(m).forEach(k => {
-          const v = String(m[k] ?? "");
-          if (v) embed.fields.push({ name: k, value: v.slice(0, 160), inline: true });
-        });
+        for (const k of Object.keys(m)) {
+            if (!ALLOWED_META_KEYS.has(k)) continue;       // ← route/ua/app 등은 버림
+            const v = String(m[k] ?? "");
+            if (v) embed.fields.push({ name: k, value: v.slice(0, 160), inline: true });
+        }
         return embed;
-      };
+        };
 
       let resp;
 
-      // ===== 1) 프런트(FormData)에서 직접 파일 전송하는 경우 =====
+      // ===== 1) 프런트에서 FormData로 파일 전송하는 경우 =====
       if (ctype.includes("multipart/form-data")) {
         const form = await request.formData();
         const title = form.get("title");
         const content = form.get("content");
         const metaRaw = form.get("meta");
+        const nonce = form.get("nonce") || form.get("id") || "";  // ← 디둡용
         let meta = {};
         try { if (typeof metaRaw === "string") meta = JSON.parse(metaRaw); } catch {}
 
-        // files[] 또는 files 키로 올라올 수 있으니 모두 수집
+        // 디둡: 같은 nonce로 15초 내 재요청이면 무시
+        if (dedupeCheck(String(nonce || ""))) {
+          return json({ ok: true, deduped: true }, okOrigin ? origin : "*");
+        }
+
+        // files[] 또는 files 키 수집
         const filesArr = [];
         for (const [k, v] of form.entries()) {
           if ((k === "files[]" || k === "files") && v instanceof File) {
@@ -96,27 +120,38 @@ export default {
         });
 
         const payload = {
-          username: "ArcGrid 문의봇",
+          username: "아크그리드 문의봇",
           content: "",
           embeds,
           attachments,
         };
-        out.append("payload_json", JSON.stringify(payload));
+
+        // ★ UTF-8 보장 (한글 깨짐 방지)
+        out.append(
+          "payload_json",
+          new Blob([JSON.stringify(payload)], { type: "application/json; charset=utf-8" }),
+          "payload.json"
+        );
 
         resp = await fetch(env.WEBHOOK, { method: "POST", body: out });
       }
 
-      // ===== 2) JSON(base64) 방식 (예전 클라이언트 호환) =====
+      // ===== 2) JSON(base64) 방식 (구버전 호환) =====
       else if (ctype.includes("application/json")) {
         const body = await request.json();
-        const baseEmbed = makeBaseEmbed(body.title, body.content, body.meta);
+        const nonce = body.nonce || body.id || "";
+        if (dedupeCheck(String(nonce || ""))) {
+          return json({ ok: true, deduped: true }, okOrigin ? origin : "*");
+        }
 
+        const baseEmbed = makeBaseEmbed(body.title, body.content, body.meta);
         const images = Array.isArray(body.images) ? body.images : [];
+
         if (!images.length) {
           resp = await fetch(env.WEBHOOK, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ username: "ArcGrid 문의봇", content: "", embeds: [baseEmbed] }),
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+            body: JSON.stringify({ username: "아크그리드 문의봇", content: "", embeds: [baseEmbed] }),
           });
         } else {
           const embeds = [baseEmbed];
@@ -124,7 +159,10 @@ export default {
           const out = new FormData();
 
           let total = 0;
-          const list = images.filter(im => im && im.data && im.name && im.type && okTypes.has(im.type)).slice(0, MAX_FILES);
+          const list = images
+            .filter(im => im && im.data && im.name && im.type && okTypes.has(im.type))
+            .slice(0, MAX_FILES);
+
           list.forEach((im, i) => {
             const bin = Uint8Array.from(atob(im.data), c => c.charCodeAt(0));
             total += bin.length;
@@ -139,12 +177,19 @@ export default {
             else embeds.push({ image: { url: `attachment://${im.name}` } });
           });
 
-          out.append("payload_json", JSON.stringify({
-            username: "ArcGrid 문의봇",
+          const payload = {
+            username: "아크그리드 문의봇",
             content: "",
             embeds,
             attachments,
-          }));
+          };
+
+          // ★ UTF-8 보장
+          out.append(
+            "payload_json",
+            new Blob([JSON.stringify(payload)], { type: "application/json; charset=utf-8" }),
+            "payload.json"
+          );
 
           resp = await fetch(env.WEBHOOK, { method: "POST", body: out });
         }
@@ -169,6 +214,7 @@ function corsHeaders(origin = "*") {
     "Access-Control-Allow-Methods": "POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 }
 
@@ -176,7 +222,7 @@ function json(obj, origin = "*", status = 200) {
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
-      "content-type": "application/json",
+      "content-type": "application/json; charset=utf-8",
       ...corsHeaders(origin),
     },
   });

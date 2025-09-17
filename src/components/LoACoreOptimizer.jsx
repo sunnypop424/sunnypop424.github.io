@@ -1414,7 +1414,7 @@ export default function LoACoreOptimizer() {
 
   {/* 포지션 선택은 그대로 유지 */}
   <div className={`flex items-center gap-4 text-sm`}>
-    <span className="text-xs text-gray-500">포지션 선택</span>
+    <span className="text-xs text-gray-500 hidden sm:block">포지션 선택</span>
     <label className="inline-flex items-center gap-2">
       <input
         type="radio"

@@ -115,6 +115,7 @@ function InquiryModal({ open, onClose }) {
 
   const handleSubmit = async (e) => {
     e?.preventDefault?.();
+    if (sending) return; // 더블클릭 방지 (프레임 경합)
     if (!title.trim() || !body.trim()) {
       alert("제목과 내용을 모두 입력하세요.");
       return;
@@ -134,13 +135,10 @@ function InquiryModal({ open, onClose }) {
       }
 
       const fd = new FormData();
+      const nonce = (crypto?.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
       fd.append("title", title.trim().slice(0, 80));
       fd.append("content", body.trim().slice(0, 4000));
-      fd.append("meta", JSON.stringify({
-        route: window.location.hash || "",
-        ua: navigator.userAgent || "",
-        app: "LoA-Core",
-      }));
+      fd.append("nonce", nonce); // ← 워커 디둡용 토큰
       files.forEach((f) => fd.append("files[]", f, f.name));
      
       const url = `${endpoint}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ""}`;
