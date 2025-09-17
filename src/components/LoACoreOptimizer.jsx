@@ -507,6 +507,35 @@ export default function LoACoreOptimizer() {
     return next;
   });
 
+  // 직업/코어 이름 변경 시 preset을 유효/기본값으로 자동 동기화
+  useEffect(() => {
+    if (category !== "order" || !selectedJob) return;
+
+    setCoresByCat((prevByCat) => {
+      const list = prevByCat[category] ?? [];
+      let changed = false;
+
+      const next = list.map((c) => {
+        const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해" | "달" | "별"
+        const items = getPresetItems(selectedJob, groupKey); // [{ value, label }, ...]
+        const isValid = c.preset && items.some((i) => i.value === c.preset);
+        const nextPreset = isValid ? c.preset : (items[0]?.value ?? undefined);
+
+        if (nextPreset !== c.preset) {
+          changed = true;
+          return { ...c, preset: nextPreset };
+        }
+        return c;
+      });
+
+      if (!changed) return prevByCat;          // 변경 없으면 no-op (재렌더/루프 방지)
+      setStale(true);                           // 보수적 갱신: 필요 없으면 이 줄은 빼도 됩니다
+      return { ...prevByCat, [category]: next };
+    });
+  }, [category, selectedJob, cores, setCoresByCat, setStale]);
+
+
+
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
     const id = uid();
@@ -525,8 +554,13 @@ export default function LoACoreOptimizer() {
     if (!nextName) { push("해/달/별 코어가 모두 추가되어 있어요."); return cs; }
     const id = uid();
     setHighlightCoreId(id);
+
+    const initialPreset =
+      category === "order" && selectedJob
+        ? getPresetItems(selectedJob, GROUP_BY_CORE_NAME[nextName])[0]?.value
+        : undefined;
     return [
-      { id, name: nextName, grade: "RELIC", minThreshold: undefined, enforceMin: false },
+      { id, name: nextName, grade: "RELIC", minThreshold: undefined, enforceMin: false, preset: initialPreset },
       ...cs
     ];
   });
@@ -832,13 +866,22 @@ export default function LoACoreOptimizer() {
             <div className="flex items-center gap-2 ml-auto whitespace-nowrap">
               {/* 질서일 때만 직업 선택 노출 */}
               {category === "order" && (
-                  <Dropdown
-                    className="w-32"
-                    value={selectedJob}
-                    onChange={(val) => setSelectedJob(val)}
-                    items={[{ value: "", label: "선택 안함" }, ...JOBS.map(j => ({ value: j, label: j }))]}
-                    placeholder="직업 선택"
-                  />
+                <Dropdown
+                  className="w-32"
+                  value={selectedJob}
+                  onChange={(val) => {
+                    setSelectedJob(val);
+                    // 직업이 바뀌는 그 이벤트 안에서 preset을 즉시 보정
+                    setCores(prev => prev.map(c => {
+                      const groupKey = GROUP_BY_CORE_NAME[c.name];
+                      const items = getPresetItems(val, groupKey);
+                      const ok = c.preset && items.some(i => i.value === c.preset);
+                      return ok ? c : { ...c, preset: (items[0]?.value ?? undefined) };
+                    }));
+                  }}
+                  items={[{ value: "", label: "선택 안함" }, ...JOBS.map(j => ({ value: j, label: j }))]}
+                  placeholder="직업 선택"
+                />
               )}
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90 ring-primary" onClick={addCore} aria-label="코어 추가"><Plus size={16} /><span className="hidden lg:inline"> 코어 추가</span></button>
             </div>
@@ -887,16 +930,21 @@ export default function LoACoreOptimizer() {
                                 (() => {
                                   const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해"|"달"|"별"
                                   const presetItems = getPresetItems(selectedJob, groupKey);
+                                  // 렌더 시점에 유효성 검사해서 표시값 확정
+                                  const resolvedPreset =
+                                    c.preset && presetItems.some(i => i.value === c.preset)
+                                      ? c.preset
+                                      : (presetItems[0]?.value ?? "");
                                   return (
                                     <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
                                       <label className={labelCls}>코어 선택</label>
-<Dropdown
-  className="w-full"
-  value={c.preset ?? (presetItems[0]?.value ?? "")} // 빈 값 방지(선택 안 함 제거됨)
-  onChange={(val) => updateCore(c.id, { preset: val })}
-  items={presetItems}
-  placeholder="직업 코어 선택"
-/>
+                                      <Dropdown
+                                        className="w-full"
+                                        value={resolvedPreset}
+                                        onChange={(val) => updateCore(c.id, { preset: val })}
+                                        items={presetItems}
+                                        placeholder="직업 코어 선택"
+                                      />
                                     </div>
                                   );
                                 })()
@@ -996,7 +1044,7 @@ export default function LoACoreOptimizer() {
           {quickAddMode && (
             <div className="mb-3">
               <QuickAddPad
-                autoFocus
+                focusOnMount
                 onAdd={(gem) => {
                   setGems(v => [gem, ...v]);     // 맨 위로 추가
                   setHighlightGemId(gem.id);     // 하이라이트
@@ -1171,19 +1219,21 @@ export default function LoACoreOptimizer() {
               const pick = results?.[i];
               const hasResult = !!(pick && pick.list && pick.list.length > 0);
               const minOfGrade = Math.min(...CORE_THRESHOLDS[c.grade]);
+              const groupKey = GROUP_BY_CORE_NAME[c.name];
+              const presetFallback = (category === "order" && selectedJob)
+                ? getPresetItems(selectedJob, groupKey)[0]?.value
+                : undefined;
               return (
                 <div key={c.id} className="border rounded-xl p-3 bg-white">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="text-base font-semibold">
-                    {c.name}
-                    {/* ★ 선택한 직업 코어 표시: 질서 + 직업 선택 + 프리셋 있을 때 */}
-                    {category === "order" && selectedJob && c.preset && (
-                      <>
-                        &nbsp;:&nbsp;{c.preset}
-                      </>
-                    )}&nbsp;
-                    <span className="text-sm text-gray-500">({CORE_LABEL[c.grade]})</span>
-                  </div>
+                    <div className="text-base font-semibold">
+                      {c.name}
+                      {/* ★ 선택한 직업 코어 표시: 질서 + 직업 선택 + 프리셋 있을 때 */}
+                      {category === "order" && selectedJob && (c.preset || presetFallback) && (
+                        <>:&nbsp;{c.preset ?? presetFallback}</>
+                      )}&nbsp;
+                      <span className="text-sm text-gray-500">({CORE_LABEL[c.grade]})</span>
+                    </div>
                     {hasResult && (
                       <div className="flex flex-wrap gap-2 items-center text-[12px] lg:text-[13px]">
                         <div className={chip}>총 의지력 <span className="font-semibold">{String(pick.totalWill)}</span> / 공급 <span>{String(supply)}</span> (<span>나머지 {String(supply - pick.totalWill)}</span>)</div>
