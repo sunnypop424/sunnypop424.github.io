@@ -36,12 +36,22 @@ function InquiryModal({ open, onClose }) {
   const [files, setFiles] = React.useState([]);          // File[] (여러 장)
   const [sending, setSending] = React.useState(false);
 
-  const endpoint = import.meta.env?.VITE_DISCORD_PROXY;
-  const apiKey = import.meta.env?.VITE_DISCORD_API_KEY || "";
+  const endpoint =
+    import.meta.env?.VITE_DISCORD_PROXY ||
+    (typeof document !== "undefined" &&
+      document.querySelector('meta[name="arcgrid-proxy"]')?.content) ||
+    (typeof window !== "undefined" && window.__ARCGRID_PROXY__) ||
+    "";
+  const apiKey =
+    import.meta.env?.VITE_DISCORD_API_KEY ||
+    (typeof document !== "undefined" &&
+      document.querySelector('meta[name="arcgrid-api-key"]')?.content) ||
+    (typeof window !== "undefined" && window.__ARCGRID_API_KEY__) ||
+    "";
 
   const MAX_FILES = 4;
-  const PER_FILE = 4 * 1024 * 1024;  // 5MB
-  const TOTAL = 16 * 1024 * 1024; // 15MB
+  const PER_FILE = 4 * 1024 * 1024;  // 4MB
+  const TOTAL = 16 * 1024 * 1024; // 16MB
   const OK_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
   React.useEffect(() => {
