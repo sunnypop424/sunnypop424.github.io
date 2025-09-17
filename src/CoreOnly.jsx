@@ -302,6 +302,13 @@ function InquiryModal({ open, onClose }) {
 
             <div className="pt-1 flex items-center gap-2 justify-end">
               <button
+                type="button"
+                onClick={onClose}
+                className="h-10 px-3 rounded-xl border inline-flex items-center justify-center bg-white hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
                 type="submit"
                 disabled={sending}
                 className={[
@@ -314,14 +321,6 @@ function InquiryModal({ open, onClose }) {
                 style={{ backgroundColor: "#a399f2" }}
               >
                 {sending ? "전송 중…" : "전송하기"}
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-10 px-3 rounded-xl border inline-flex items-center justify-center bg-white hover:bg-gray-50"
-              >
-                취소
               </button>
             </div>
         </form>
