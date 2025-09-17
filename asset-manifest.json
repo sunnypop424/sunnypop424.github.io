@@ -1,27 +1,27 @@
 {
   "files": {
-    "main.css": "/static/css/main.d8da6231.css",
-    "main.js": "/static/js/main.bb2adb30.js",
+    "main.css": "/static/css/main.a35f6a55.css",
+    "main.js": "/static/js/main.5a1b4cee.js",
     "static/css/874.858a294e.chunk.css": "/static/css/874.858a294e.chunk.css",
-    "static/js/874.be63d096.chunk.js": "/static/js/874.be63d096.chunk.js",
+    "static/js/874.87d044ca.chunk.js": "/static/js/874.87d044ca.chunk.js",
     "static/css/815.770bcaeb.chunk.css": "/static/css/815.770bcaeb.chunk.css",
     "static/js/815.e5bdb809.chunk.js": "/static/js/815.e5bdb809.chunk.js",
     "static/js/453.f9536f7c.chunk.js": "/static/js/453.f9536f7c.chunk.js",
-    "static/js/290.d8e154ba.chunk.js": "/static/js/290.d8e154ba.chunk.js",
+    "static/js/290.0d8143b6.chunk.js": "/static/js/290.0d8143b6.chunk.js",
     "static/js/124.6a9367b4.chunk.js": "/static/js/124.6a9367b4.chunk.js",
     "index.html": "/index.html",
-    "main.d8da6231.css.map": "/static/css/main.d8da6231.css.map",
-    "main.bb2adb30.js.map": "/static/js/main.bb2adb30.js.map",
+    "main.a35f6a55.css.map": "/static/css/main.a35f6a55.css.map",
+    "main.5a1b4cee.js.map": "/static/js/main.5a1b4cee.js.map",
     "874.858a294e.chunk.css.map": "/static/css/874.858a294e.chunk.css.map",
-    "874.be63d096.chunk.js.map": "/static/js/874.be63d096.chunk.js.map",
+    "874.87d044ca.chunk.js.map": "/static/js/874.87d044ca.chunk.js.map",
     "815.770bcaeb.chunk.css.map": "/static/css/815.770bcaeb.chunk.css.map",
     "815.e5bdb809.chunk.js.map": "/static/js/815.e5bdb809.chunk.js.map",
     "453.f9536f7c.chunk.js.map": "/static/js/453.f9536f7c.chunk.js.map",
-    "290.d8e154ba.chunk.js.map": "/static/js/290.d8e154ba.chunk.js.map",
+    "290.0d8143b6.chunk.js.map": "/static/js/290.0d8143b6.chunk.js.map",
     "124.6a9367b4.chunk.js.map": "/static/js/124.6a9367b4.chunk.js.map"
   },
   "entrypoints": [
-    "static/css/main.d8da6231.css",
-    "static/js/main.bb2adb30.js"
+    "static/css/main.a35f6a55.css",
+    "static/js/main.5a1b4cee.js"
   ]
 }
