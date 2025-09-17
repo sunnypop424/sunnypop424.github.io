@@ -1,7 +1,7 @@
 // src/components/LoACoreOptimizer.jsx
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown } from "lucide-react";
+import { Plus, Trash2, RotateCcw, ChevronUp, ChevronDown, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useOptimizer } from '../hooks/useOptimizer';
@@ -83,6 +83,57 @@ const TARGET_MAX_BY_GRADE = {
   RELIC: 19,     // 유물
   ANCIENT: 20,   // 고대
 };
+
+// "효과" 원본을 점수-설명 배열로 정규화
+function normalizeEffects(raw) {
+  if (!raw) return [];
+  let arr = [];
+
+  if (Array.isArray(raw)) {
+    arr = raw.flatMap((item) => {
+      if (!item) return [];
+      if (typeof item === "string") {
+        const m = item.match(/(\d+)\s*P?/i);
+        const p = m ? Number(m[1]) : null;
+        return p ? [{ point: p, text: item.replace(/^.*?:\s*/, "").trim() || item.trim() }] : [];
+      }
+      if (typeof item === "object") {
+        // {point,text} | {P,desc} | {포인트,효과} 등 관용 처리
+        let p = item.point ?? item.P ?? item.포인트 ?? null;
+        if (typeof p === "string") p = parseInt(p.replace(/\D/g, ""), 10);
+        const t = item.text ?? item.desc ?? item.효과 ?? item.value ?? "";
+        return Number.isFinite(p) ? [{ point: Number(p), text: String(t) }] : [];
+      }
+      return [];
+    });
+  } else if (typeof raw === "object") {
+    // {"6P":"...","10P":"..."} 같은 맵
+    arr = Object.entries(raw).map(([k, v]) => {
+      const p = parseInt(String(k).replace(/\D/g, ""), 10);
+      return { point: p, text: String(v) };
+    });
+  } else if (typeof raw === "string") {
+    // 줄 단위 "6P: ..." 등
+    arr = raw.split(/\r?\n/).flatMap((line) => {
+      const m = line.match(/(\d+)\s*P?/i);
+      const p = m ? Number(m[1]) : null;
+      return p ? [{ point: p, text: line.replace(/^.*?:\s*/, "").trim() || line.trim() }] : [];
+    });
+  }
+
+  return arr
+    .filter((x) => Number.isFinite(x.point) && x.text)
+    .sort((a, b) => a.point - b.point);
+}
+
+// 특정 직업/그룹/프리셋의 효과 배열 가져오기
+function getEffectsForPreset(job, groupKey, preset) {
+  if (!job || !groupKey || !preset) return [];
+  const entries = ARC_CORES?.data?.[job] ?? [];
+  const row = entries.find((e) => e["그룹"] === groupKey && e["코어"] === preset);
+  return normalizeEffects(row?.["효과"]);
+}
+
 
 // 역할 선택 시 반대 역할 키 가중치를 0으로 마스킹
 function maskWeightsForRole(prev, role) {
@@ -347,6 +398,134 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
     </div>
   );
 }
+function CoreEffectInfo({ job, groupKey, preset, grade, category, coreName, supply }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  const effects = getEffectsForPreset(job, groupKey, preset);
+  const maxP = TARGET_MAX_BY_GRADE[grade] ?? 999;
+  const list = effects.filter((e) => e.point <= maxP);
+
+  // "해 코어" → "해", "달 코어" → "달", "별 코어" → "별"
+  const coreShort =
+    GROUP_BY_CORE_NAME[coreName] /* "해|달|별" */ ??
+    coreName.replace(/\s*코어$/, ""); // 안전망
+
+  const LABEL_CLS = "text-[12px] text-gray-500 mb-1 text-indigo-400";
+
+  // 등급 판별: CORE_LABEL[grade] 문자열 기준 + 키 백업
+  const isAncient =
+    (CORE_LABEL?.[grade] ?? "").includes("고대") || String(grade).toLowerCase() === "ancient";
+    
+  // 등급별 텍스트 색상 클래스
+  const gradeColorCls =
+  String(grade).toUpperCase() === "HERO"    || (CORE_LABEL?.[grade] ?? "").includes("영웅") ? "text-fuchsia-500" :
+  String(grade).toUpperCase() === "LEGEND"  || (CORE_LABEL?.[grade] ?? "").includes("전설") ? "text-amber-500"  :
+  String(grade).toUpperCase() === "RELIC"   || (CORE_LABEL?.[grade] ?? "").includes("유물") ? "text-orange-700"  :
+  String(grade).toUpperCase() === "ANCIENT" || (CORE_LABEL?.[grade] ?? "").includes("고대") ? "text-[#d3bd8b]"   :
+  "text-gray-800";
+
+  // "A/B%", "A%/B%", "A/B" 형태 치환 (여러 개 등장해도 전부 처리)
+  const pickSlashValueByGrade = (text) => {
+    const pickRight = isAncient; // 고대: 뒤 값, 유물: 앞 값
+
+    // 1) "A%/B%" → "A%" or "B%"
+    let out = text.replace(
+      /(\d+(?:\.\d+)?)%\s*\/\s*(\d+(?:\.\d+)?)%/g,
+      (_, a, b) => (pickRight ? b : a) + "%"
+    );
+
+    // 2) "A/B%" → "A%" or "B%" (예: 50.0/60.0%)
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(%)/g,
+      (_, a, b, pct) => (pickRight ? b : a) + pct
+    );
+
+    // 3) "A/B" → "A" or "B" (단위가 따로 뒤에 붙는 경우는 그대로 둠)
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(?!\s*[%\d])/g,
+      (_, a, b) => (pickRight ? b : a)
+    );
+
+    return out;
+  };
+
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex items-center align-top ml-1 cursor-pointer"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      <Info size={16} aria-hidden="true" color="#a399f2" />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className="absolute z-[999999] mt-2 left-1/2 -translate-x-1/2 w-[400px] rounded-xl border bg-white shadow-lg p-3 text-xs"
+            role="tooltip"
+          >
+            {/* 제목 */}
+            <div className="text-[13px] font-semibold mb-2">
+              <div>{CATEGORY_LABEL[category]}의 {coreName} : {preset}</div>
+              <div className={`text-[12px] font-medium ${gradeColorCls}`}>{CORE_LABEL[grade]} 아크 그리드 코어</div>
+            </div>
+
+            {/* 코어 타입 */}
+            <div className="mb-2">
+              <div className={LABEL_CLS}>코어 타입</div>
+              <div className="text-[12px] font-medium">
+                <span>{CATEGORY_LABEL[category]}</span>
+                <span className="mx-1">–</span>
+                <span>{coreShort}</span>
+              </div>
+            </div>
+
+            {/* 코어 공급 의지력 */}
+            <div className="mb-2">
+              <div className={LABEL_CLS}>코어 공급 의지력</div>
+              <div className="text-[12px] font-medium">{String(supply)} 포인트</div>
+            </div>
+
+          {/* 코어 옵션 (등급 최대 포인트 이하만) */}
+          <div className={LABEL_CLS}>코어 옵션</div>
+          {list.length === 0 ? (
+            <div className="text-gray-500">옵션 정보가 없습니다.</div>
+          ) : (
+            <ul className="mt-1 space-y-1">
+              {list.map((e) => {
+                const text = e.point === 17 ? pickSlashValueByGrade(e.text) : e.text;
+                return (
+                  <li
+                    key={e.point}
+                    className="grid grid-cols-[32px_1fr] gap-x-1 items-start min-w-0"
+                  >
+                    {/* 왼쪽: 포인트 (고정폭, 우측정렬) */}
+                    <span className="w-[32px] shrink-0 text-amber-500 font-semibold">
+                      [{e.point}P]
+                    </span>
+                    {/* 오른쪽: 설명 (이 컬럼에서만 줄바꿈) */}
+                    <span className="text-gray-800 break-words min-w-0">
+                      {text}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </span>
+  );
+}
+
 
 function useToasts() {
   const [toasts, setToasts] = useState([]);
@@ -580,6 +759,7 @@ export default function LoACoreOptimizer() {
   });
 
   // Drag state (for backdrop blur toggle)
+  // eslint-disable-next-line
   const [dragging, setDragging] = useState(false);
   const onDragStart = () => {
     requestAnimationFrame(() => setDragging(true));
@@ -860,7 +1040,7 @@ export default function LoACoreOptimizer() {
         </section>
 
         {/* 코어 입력 & 우선순위(DnD/버튼 이동) */}
-        <section className={`${card} p-4 lg:p-6 !mt-2 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6 !mt-2`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>{CATEGORY_LABEL[category]} 코어 입력</h2>
             <div className="flex items-center gap-2 ml-auto whitespace-nowrap">
@@ -926,29 +1106,6 @@ export default function LoACoreOptimizer() {
                                 <label className={labelCls}>코어 종류</label>
                                 <Dropdown className="w-full lg:w-40" value={c.name} onChange={(val) => updateCore(c.id, { name: val })} items={coreNameItems} placeholder="코어명" />
                               </div>
-                              {category === "order" && selectedJob && (
-                                (() => {
-                                  const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해"|"달"|"별"
-                                  const presetItems = getPresetItems(selectedJob, groupKey);
-                                  // 렌더 시점에 유효성 검사해서 표시값 확정
-                                  const resolvedPreset =
-                                    c.preset && presetItems.some(i => i.value === c.preset)
-                                      ? c.preset
-                                      : (presetItems[0]?.value ?? "");
-                                  return (
-                                    <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
-                                      <label className={labelCls}>코어 선택</label>
-                                      <Dropdown
-                                        className="w-full"
-                                        value={resolvedPreset}
-                                        onChange={(val) => updateCore(c.id, { preset: val })}
-                                        items={presetItems}
-                                        placeholder="직업 코어 선택"
-                                      />
-                                    </div>
-                                  );
-                                })()
-                              )}
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>코어 등급</label>
                                 <Dropdown
@@ -967,6 +1124,40 @@ export default function LoACoreOptimizer() {
                                   placeholder="코어 등급"
                                 />
                               </div>
+                              {category === "order" && selectedJob && (
+                                (() => {
+                                  const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해"|"달"|"별"
+                                  const presetItems = getPresetItems(selectedJob, groupKey);
+                                  // 렌더 시점에 유효성 검사해서 표시값 확정
+                                  const resolvedPreset =
+                                    c.preset && presetItems.some(i => i.value === c.preset)
+                                      ? c.preset
+                                      : (presetItems[0]?.value ?? "");
+                                  return (
+                                    <div className="flex flex-col min-w-[160px] w-full lg:w-auto">
+                                      <label className={labelCls}>
+                                        직업 코어 선택
+                                        <CoreEffectInfo
+                                          job={selectedJob}
+                                          groupKey={groupKey}
+                                          preset={resolvedPreset}
+                                          grade={c.grade}
+                                          category={category}
+                                          coreName={c.name}
+                                          supply={CORE_SUPPLY[c.grade]}
+                                        />
+                                      </label>
+                                      <Dropdown
+                                        className="w-full"
+                                        value={resolvedPreset}
+                                        onChange={(val) => updateCore(c.id, { preset: val })}
+                                        items={presetItems}
+                                        placeholder="직업 코어 선택"
+                                      />
+                                    </div>
+                                  );
+                                })()
+                              )}
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>공급 의지력</label>
                                 <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center"><span className="text-primary font-semibold">{supply}</span></div>
@@ -1005,7 +1196,7 @@ export default function LoACoreOptimizer() {
         </section>
 
         {/* 젬 입력 */}
-        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6`}>
           <div
             className={`flex items-center gap-2 lg:gap-3 ${quickAddMode ? '' : 'mb-3'}`}
           >
@@ -1133,7 +1324,7 @@ export default function LoACoreOptimizer() {
         </section>
 
         {/* 유효옵션 가중치 */}
-        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>유효옵션 가중치</h2>
             <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border ml-auto whitespace-nowrap inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={resetWeights} aria-label="가중치 초기화"><RotateCcw size={16} /><span className="hidden lg:inline"> 가중치 초기화</span></button>
@@ -1207,7 +1398,7 @@ export default function LoACoreOptimizer() {
         </div>
 
         {/* 결과 */}
-        <section className={`${card} p-4 lg:p-6 ${dragging ? '' : 'backdrop-blur'}`}>
+        <section className={`${card} p-4 lg:p-6`}>
           <h2 className={sectionTitle}>결과</h2>
           <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
           {!isComputing && stale && hasCalculated && (
