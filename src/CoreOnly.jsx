@@ -36,6 +36,8 @@ function InquiryModal({ open, onClose }) {
   const [files, setFiles] = React.useState([]);          // File[] (여러 장)
   const [sending, setSending] = React.useState(false);
 
+  
+
   const endpoint =
     import.meta.env?.VITE_DISCORD_PROXY ||
     (typeof document !== "undefined" &&
@@ -48,6 +50,10 @@ function InquiryModal({ open, onClose }) {
       document.querySelector('meta[name="arcgrid-api-key"]')?.content) ||
     (typeof window !== "undefined" && window.__ARCGRID_API_KEY__) ||
     "";
+
+    // InquiryModal 내부에 임시로
+    console.log("endpoint =", endpoint);
+    console.log("apiKey   =", apiKey);
 
   const MAX_FILES = 4;
   const PER_FILE = 4 * 1024 * 1024;  // 4MB

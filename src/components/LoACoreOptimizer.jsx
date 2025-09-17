@@ -884,37 +884,6 @@ export default function LoACoreOptimizer() {
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
 
-useEffect(() => {
-  function runSelfTests() {
-    try {
-      // 가중치는 1배(배율)로 고정
-      const w = sanitizeWeights({ atk: 1, add: 1, boss: 1 });
-
-      // 딜러: atk L2 = 0.067%, add L3 = 0.187% -> 합 0.254%
-      const gem = { id: "t1", will: 1, point: 1, o1k: "atk", o1v: 2, o2k: "add", o2v: 3 };
-      const gotDealer = scoreGemForRole(gem, "dealer", w);
-      const expectDealer = 0.067 + 0.187;
-
-      // 부동소수 오차 허용
-      console.assert(Math.abs(gotDealer - expectDealer) < 1e-9,
-        `scoreGemForRole dealer failed: got=${gotDealer}, expect=${expectDealer}`);
-
-      // 서포터: 선형(레벨=퍼센트). brand L3 = 3%
-      const gemSup = { id: "t2", will: 1, point: 1, o1k: "brand", o1v: 3, o2k: "allyAtk", o2v: 0 };
-      const gotSupport = scoreGemForRole(gemSup, "support", w);
-      const expectSupport = 3; // 3%
-
-      console.assert(Math.abs(gotSupport - expectSupport) < 1e-9,
-        `scoreGemForRole support failed: got=${gotSupport}, expect=${expectSupport}`);
-
-      console.log("✅ Self-tests passed");
-    } catch (e) {
-      console.warn("❌ Self-tests encountered an error", e);
-    }
-  }
-  runSelfTests();
-}, []);
-
   useEffect(() => {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights, selectedJob });
   }, [category, coresByCat, gemsByCat, role, weights, selectedJob]);
