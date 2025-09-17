@@ -145,7 +145,7 @@ function InquiryModal({ open, onClose }) {
       const res = await fetch(url, { method: "POST", body: fd }); // Content-Type 수동 지정 X
       const data = await res.json().catch(() => ({}));
       if (data?.ok) {
-        alert("디스코드로 전송되었습니다. 감사합니다!");
+        alert("문의가 전송되었습니다. 감사합니다!");
         setTitle(""); setBody(""); setFiles([]);
         onClose?.();
       } else {
@@ -173,7 +173,7 @@ function InquiryModal({ open, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-semibold">디스코드로 문의하기</h3>
+          <h3 className="text-base sm:text-lg font-semibold">문의하기</h3>
           <button
             type="button"
             onClick={onClose}
@@ -313,7 +313,7 @@ function InquiryModal({ open, onClose }) {
                 ].join(" ")}
                 style={{ backgroundColor: "#a399f2" }}
               >
-                {sending ? "전송 중…" : "디스코드로 보내기"}
+                {sending ? "전송 중…" : "전송하기"}
               </button>
 
               <button
