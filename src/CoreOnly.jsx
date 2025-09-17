@@ -40,8 +40,8 @@ function InquiryModal({ open, onClose }) {
   const apiKey = import.meta.env?.VITE_DISCORD_API_KEY || "";
 
   const MAX_FILES = 4;
-  const PER_FILE = 5 * 1024 * 1024;  // 5MB
-  const TOTAL = 15 * 1024 * 1024; // 15MB
+  const PER_FILE = 4 * 1024 * 1024;  // 5MB
+  const TOTAL = 16 * 1024 * 1024; // 15MB
   const OK_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
   React.useEffect(() => {
@@ -174,7 +174,7 @@ function InquiryModal({ open, onClose }) {
         </div>
 
         <p className="mt-1 text-xs text-gray-600">
-          제목/내용과 함께 이미지를 <b>최대 {MAX_FILES}장</b>까지 첨부할 수 있어요. (파일당 5MB, 총 15MB)
+          제목/내용과 함께 이미지를 <b>최대 {MAX_FILES}장</b>까지 첨부할 수 있어요. (파일당 4MB, 총 16MB)
         </p>
 
         <form onSubmit={handleSubmit} className="mt-3 space-y-3">
@@ -255,7 +255,7 @@ function InquiryModal({ open, onClose }) {
                   </label>
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  허용: png, jpg, webp, gif등 · 파일당 5MB · 총 20MB
+                  허용: png, jpg, webp, gif등 · 파일당 4MB · 총 16MB
                 </div>
               </div>
             </div>
