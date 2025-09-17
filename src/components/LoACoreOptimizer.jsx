@@ -1,4 +1,22 @@
-// src/components/LoACoreOptimizer.jsx
+/**
+ * LoACoreOptimizer.jsx
+ *
+ * 재구성(리팩터링된 파일 배치 & 계층 주석) 버전.
+ * - 실행 로직/동작 동일 유지 (함수/값, 상태, JSX 구조, 훅 호출 순서에 의존하는 부분 불변).
+ * - 기존 주석은 모두 제거했고, 가독성을 위한 섹션/행동 중심의 주석을 새로 정리하여 추가함.
+ * - "재그룹/재배치"는 선언의 물리적 위치만 정렬(의존성 방향상 안전한 순서)했을 뿐, 코드 의미를 바꾸지 않음.
+ *
+ * 섹션 구성
+ *  A. 외부/내부 모듈 임포트
+ *  B. 도메인/뷰 공통 상수 및 매핑
+ *  C. 직업-코어 프리셋/효과 유틸
+ *  D. 공용 유틸(로컬스토리지, UID, 외부 클릭 등)
+ *  E. DnD 포털용 Draggable 래퍼
+ *  F. UI 프리미티브(드롭다운, 토스트, 숫자입력)
+ *  G. 프리셋 설명 툴팁(CoreEffectInfo)
+ *  H. 메인 컴포넌트(LoACoreOptimizer) + QuickAddPad(내부)
+ */
+
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { createPortal } from "react-dom";
@@ -9,7 +27,6 @@ import { useOptimizer } from '../hooks/useOptimizer';
 import KakaoAdfit from "./KakaoAdfit";
 import './LoACoreOptimizer.css';
 
-// 최적화 순수 로직/상수 import (UI에서 쓰는 상수/헬퍼만)
 import {
   CORE_SUPPLY,
   CORE_THRESHOLDS,
@@ -27,40 +44,48 @@ import {
 } from '../lib/optimizerCore.js';
 import ARC_CORES from "../data/arc_cores_select.json";
 
-/* --------------------------------------------------------------------------
- * [타입 설명 - 코드 동작과 무관한 개발자 참고 주석]
- *  - Role: "dealer"(딜러) | "support"(서폿)
- *  - OptionKey: 각 젬 옵션 키 ("atk","add","boss","brand","allyDmg","allyAtk")
- *  - CoreGrade: 코어 등급 ("HERO","LEGEND","RELIC","ANCIENT")
- *  - Gem/CoreDef/Weights/ComboInfo: 데이터 모델
- * -------------------------------------------------------------------------- */
+/* ──────────────────────────────────────────────────────────────────────────
+ * B. 도메인/뷰 공통 상수 및 매핑
+ *    - 화면 공통 라벨/세트, 로컬스토리지 키, 직업/코어 그룹 매핑 등
+ * ────────────────────────────────────────────────────────────────────────── */
 
-/* 도메인 외 UI 전용 상수 */
 const CORE_NAME_ITEMS = [
   { value: "해 코어", label: "해 코어" },
   { value: "달 코어", label: "달 코어" },
   { value: "별 코어", label: "별 코어" },
 ];
+
 const CATEGORY_LABEL = { order: "질서", chaos: "혼돈" };
 const LS_KEY = "LoA-CoreOptimizer-v2";
 
-// ★ 직업/코어 그룹 매핑
 const JOBS = ARC_CORES?.jobs ?? [];
 const CORE_NAME_BY_GROUP = { "해": "해 코어", "달": "달 코어", "별": "별 코어" };
 const GROUP_BY_CORE_NAME = { "해 코어": "해", "달 코어": "달", "별 코어": "별" };
 
-// 직업별로 (해/달/별) 어떤 그룹이 있는지 -> "해 코어"/"달 코어"/"별 코어" 셋 반환
+const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
+
+const TARGET_MAX_BY_GRADE = {
+  HERO: 10,
+  LEGEND: 14,
+  RELIC: 19,
+  ANCIENT: 20,
+};
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * C. 직업-코어 프리셋/효과 유틸
+ *    - 직업별 허용 코어, 프리셋 목록, 효과 정규화/조회
+ * ────────────────────────────────────────────────────────────────────────── */
+
 function getAllowedCoreNameSet(job) {
   const entries = ARC_CORES?.data?.[job] ?? [];
-  const groups = new Set(entries.map(e => e["그룹"])); // "해" | "달" | "별"
+  const groups = new Set(entries.map(e => e["그룹"]));
   const names = new Set(
     Array.from(groups).map(g => CORE_NAME_BY_GROUP[g]).filter(Boolean)
   );
   return names;
 }
 
-// 직업 + 그룹(해/달/별)에 해당하는 '직업 코어' 프리셋 목록
-function getPresetItems(job, groupKey /* "해"|"달"|"별" */) {
+function getPresetItems(job, groupKey) {
   if (!job || !groupKey) return [];
   const entries = ARC_CORES?.data?.[job] ?? [];
   return entries
@@ -68,24 +93,6 @@ function getPresetItems(job, groupKey /* "해"|"달"|"별" */) {
     .map(e => ({ value: e["코어"], label: e["코어"] }));
 }
 
-
-/* =============================== 유틸/헬퍼 (UI) =============================== */
-const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
-function nextAvailableCoreName(existingNames) {
-  for (const n of CORE_ORDER) if (!existingNames.has(n)) return n;
-  return null;
-}
-const uid = () => Math.random().toString(36).slice(2, 9);
-
-// 등급별 목표 포인트 최대값
-const TARGET_MAX_BY_GRADE = {
-  HERO: 10,      // 영웅
-  LEGEND: 14,    // 전설
-  RELIC: 19,     // 유물
-  ANCIENT: 20,   // 고대
-};
-
-// "효과" 원본을 점수-설명 배열로 정규화
 function normalizeEffects(raw) {
   if (!raw) return [];
   let arr = [];
@@ -99,7 +106,6 @@ function normalizeEffects(raw) {
         return p ? [{ point: p, text: item.replace(/^.*?:\s*/, "").trim() || item.trim() }] : [];
       }
       if (typeof item === "object") {
-        // {point,text} | {P,desc} | {포인트,효과} 등 관용 처리
         let p = item.point ?? item.P ?? item.포인트 ?? null;
         if (typeof p === "string") p = parseInt(p.replace(/\D/g, ""), 10);
         const t = item.text ?? item.desc ?? item.효과 ?? item.value ?? "";
@@ -108,13 +114,11 @@ function normalizeEffects(raw) {
       return [];
     });
   } else if (typeof raw === "object") {
-    // {"6P":"...","10P":"..."} 같은 맵
     arr = Object.entries(raw).map(([k, v]) => {
       const p = parseInt(String(k).replace(/\D/g, ""), 10);
       return { point: p, text: String(v) };
     });
   } else if (typeof raw === "string") {
-    // 줄 단위 "6P: ..." 등
     arr = raw.split(/\r?\n/).flatMap((line) => {
       const m = line.match(/(\d+)\s*P?/i);
       const p = m ? Number(m[1]) : null;
@@ -127,7 +131,6 @@ function normalizeEffects(raw) {
     .sort((a, b) => a.point - b.point);
 }
 
-// 특정 직업/그룹/프리셋의 효과 배열 가져오기
 function getEffectsForPreset(job, groupKey, preset) {
   if (!job || !groupKey || !preset) return [];
   const entries = ARC_CORES?.data?.[job] ?? [];
@@ -135,8 +138,18 @@ function getEffectsForPreset(job, groupKey, preset) {
   return normalizeEffects(row?.["효과"]);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * D. 공용 유틸
+ *    - UID 생성, 역할별 가중치 마스킹, 로컬스토리지 I/O, 다음 코어명 탐색, 외부클릭
+ * ────────────────────────────────────────────────────────────────────────── */
 
-// 역할 선택 시 반대 역할 키 가중치를 0으로 마스킹
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+function nextAvailableCoreName(existingNames) {
+  for (const n of CORE_ORDER) if (!existingNames.has(n)) return n;
+  return null;
+}
+
 function maskWeightsForRole(prev, role) {
   const next = { ...prev };
   const zeroSet = role === "dealer" ? ROLE_KEYS.support : ROLE_KEYS.dealer;
@@ -145,6 +158,7 @@ function maskWeightsForRole(prev, role) {
   oneSet.forEach((k) => { next[k] = 1; });
   return next;
 }
+
 function loadFromStorage() {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -155,6 +169,7 @@ function loadFromStorage() {
     return null;
   }
 }
+
 function saveToStorage(data) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(data));
@@ -163,23 +178,6 @@ function saveToStorage(data) {
   }
 }
 
-/* =============================== Portal-aware Draggable =============================== */
-const dragPortal = typeof document !== "undefined" ? document.body : null;
-function PortalAwareDraggable({ draggableId, index, children }) {
-  return (
-    <Draggable draggableId={draggableId} index={index}>
-      {(provided, snapshot) => {
-        const rendered =
-          typeof children === "function" ? children(provided, snapshot) : children;
-        return snapshot.isDragging && dragPortal
-          ? createPortal(rendered, dragPortal)
-          : rendered;
-      }}
-    </Draggable>
-  );
-}
-
-/* =============================== 공통 UI 훅/컴포넌트 =============================== */
 function useOnClickOutside(refs, handler) {
   const refsArray = React.useMemo(
     () => (Array.isArray(refs) ? refs : [refs]),
@@ -196,17 +194,45 @@ function useOnClickOutside(refs, handler) {
     return () => document.removeEventListener('click', listener, true);
   }, [refsArray]);
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * E. Portal-aware Draggable 래퍼
+ *    - 드래그 시 body 포털로 이동시켜 클리핑/레이어 문제 방지
+ * ────────────────────────────────────────────────────────────────────────── */
+
+const dragPortal = typeof document !== "undefined" ? document.body : null;
+
+function PortalAwareDraggable({ draggableId, index, children }) {
+  return (
+    <Draggable draggableId={draggableId} index={index}>
+      {(provided, snapshot) => {
+        const rendered =
+          typeof children === "function" ? children(provided, snapshot) : children;
+        return snapshot.isDragging && dragPortal
+          ? createPortal(rendered, dragPortal)
+          : rendered;
+      }}
+    </Draggable>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * F. UI 프리미티브
+ *    1) Dropdown: 키보드 접근성/포털 메뉴/ARIA 적용
+ *    2) ToastStack + useToasts: 간단 토스트 큐
+ *    3) NumberInput: 숫자 입력 공통(클램프/포맷/휠 방지)
+ * ────────────────────────────────────────────────────────────────────────── */
+
 function Dropdown({ value, items, onChange, placeholder, className, bordered = true }) {
   const [open, setOpen] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(-1); // 현재 키보드 포커스용
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const btnRef = useRef(null);
   const menuRef = useRef(null);
-  const itemRefs = useRef([]); // li>button 각각의 ref
+  const itemRefs = useRef([]);
   const menuPos = useRef({ top: 0, left: 0, width: 0 });
   const [, forceTick] = useState(0);
   const listboxId = useRef(`dd-list-${Math.random().toString(36).slice(2)}`).current;
 
-  // 열릴 때 선택값 또는 첫 사용가능 항목으로 포커스 초기화
   const initFocusIndex = useCallback(() => {
     const sel = items.findIndex(i => i.value === value && !i.disabled);
     if (sel >= 0) return sel;
@@ -241,11 +267,9 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
     };
   }, [open]);
 
-  // 열릴 때 키보드 포커스 타깃 준비 + 첫 렌더 다음 프레임에 실제 DOM 포커스
   useEffect(() => {
     if (!open) return;
     setFocusedIndex(initFocusIndex());
-    // 다음 프레임에 리스트박스에 포커스 이동 (버튼 포커스가 메뉴로 남는 이슈 방지)
     const t = requestAnimationFrame(() => {
       const el = itemRefs.current[initFocusIndex()];
       (el ?? menuRef.current)?.focus?.();
@@ -255,7 +279,6 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
 
   const selected = items.find((i) => i.value === value);
 
-  // 유틸: 다음/이전 사용가능 인덱스
   const getNextEnabled = (start, dir) => {
     const n = items.length;
     if (n === 0) return -1;
@@ -267,16 +290,13 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
     return -1;
   };
 
-  // 버튼 키다운: 열고 닫기/첫 항목 포커스
   const onButtonKeyDown = (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const willOpen = !open;
       if (willOpen) {
         setOpen(true);
-        // 열리면 useEffect가 포커스 세팅
       } else {
-        // 이미 열렸다면 이동
         const base = focusedIndex >= 0 ? focusedIndex : initFocusIndex();
         const next = e.key === "ArrowDown" ? getNextEnabled(base, +1) : getNextEnabled(base, -1);
         if (next >= 0) setFocusedIndex(next);
@@ -287,7 +307,6 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
     }
   };
 
-  // 메뉴 키다운: 항목 이동/선택/닫기
   const onMenuKeyDown = (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -311,7 +330,6 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
       if (it && !it.disabled) {
         onChange(it.value);
         setOpen(false);
-        // 닫히면 버튼으로 포커스 복귀
         requestAnimationFrame(() => btnRef.current?.querySelector("button")?.focus?.());
       }
     } else if (e.key === "Escape") {
@@ -319,15 +337,12 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
       setOpen(false);
       requestAnimationFrame(() => btnRef.current?.querySelector("button")?.focus?.());
     } else if (e.key === "Tab") {
-      // 탭으로 이동할 땐 자연스럽게 닫기
       setOpen(false);
     }
   };
 
-  // 마우스 호버시 포커스 인덱스 업데이트(시각 일치)
   const onItemMouseEnter = (i) => setFocusedIndex(i);
 
-  // 메뉴 DOM
   const menu = open ? (
     <AnimatePresence>
       <motion.ul
@@ -399,137 +414,6 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
     </div>
   );
 }
-function CoreEffectInfo({ job, groupKey, preset, grade, category, coreName, supply }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  const effects = getEffectsForPreset(job, groupKey, preset);
-  const maxP = TARGET_MAX_BY_GRADE[grade] ?? 999;
-  const list = effects.filter((e) => e.point <= maxP);
-
-  // "해 코어" → "해", "달 코어" → "달", "별 코어" → "별"
-  const coreShort =
-    GROUP_BY_CORE_NAME[coreName] /* "해|달|별" */ ??
-    coreName.replace(/\s*코어$/, ""); // 안전망
-
-  const LABEL_CLS = "text-[12px] text-gray-500 mb-1 text-indigo-400";
-
-  // 등급 판별: CORE_LABEL[grade] 문자열 기준 + 키 백업
-  const isAncient =
-    (CORE_LABEL?.[grade] ?? "").includes("고대") || String(grade).toLowerCase() === "ancient";
-
-  // 등급별 텍스트 색상 클래스
-  const gradeColorCls =
-    String(grade).toUpperCase() === "HERO" || (CORE_LABEL?.[grade] ?? "").includes("영웅") ? "text-fuchsia-500" :
-      String(grade).toUpperCase() === "LEGEND" || (CORE_LABEL?.[grade] ?? "").includes("전설") ? "text-amber-500" :
-        String(grade).toUpperCase() === "RELIC" || (CORE_LABEL?.[grade] ?? "").includes("유물") ? "text-orange-700" :
-          String(grade).toUpperCase() === "ANCIENT" || (CORE_LABEL?.[grade] ?? "").includes("고대") ? "text-[#d3bd8b]" :
-            "text-gray-800";
-
-  // "A/B%", "A%/B%", "A/B" 형태 치환 (여러 개 등장해도 전부 처리)
-  const pickSlashValueByGrade = (text) => {
-    const pickRight = isAncient; // 고대: 뒤 값, 유물: 앞 값
-
-    // 1) "A%/B%" → "A%" or "B%"
-    let out = text.replace(
-      /(\d+(?:\.\d+)?)%\s*\/\s*(\d+(?:\.\d+)?)%/g,
-      (_, a, b) => (pickRight ? b : a) + "%"
-    );
-
-    // 2) "A/B%" → "A%" or "B%" (예: 50.0/60.0%)
-    out = out.replace(
-      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(%)/g,
-      (_, a, b, pct) => (pickRight ? b : a) + pct
-    );
-
-    // 3) "A/B" → "A" or "B" (단위가 따로 뒤에 붙는 경우는 그대로 둠)
-    out = out.replace(
-      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(?!\s*[%\d])/g,
-      (_, a, b) => (pickRight ? b : a)
-    );
-
-    return out;
-  };
-
-  return (
-    <span
-      ref={ref}
-      className="relative inline-flex items-center align-top ml-1 cursor-pointer"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-    >
-      <Info size={16} aria-hidden="true" color="#a399f2" />
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
-            className="absolute z-[999999] mt-2 left-1/2 -translate-x-1/2 w-[400px] rounded-xl border bg-white shadow-lg p-3 text-xs"
-            role="tooltip"
-          >
-            {/* 제목 */}
-            <div className="text-[13px] font-semibold mb-2">
-              <div>{CATEGORY_LABEL[category]}의 {coreName} : {preset}</div>
-              <div className={`text-[12px] font-medium ${gradeColorCls}`}>{CORE_LABEL[grade]} 아크 그리드 코어</div>
-            </div>
-
-            {/* 코어 타입 */}
-            <div className="mb-2">
-              <div className={LABEL_CLS}>코어 타입</div>
-              <div className="text-[12px] font-medium">
-                <span>{CATEGORY_LABEL[category]}</span>
-                <span className="mx-1">–</span>
-                <span>{coreShort}</span>
-              </div>
-            </div>
-
-            {/* 코어 공급 의지력 */}
-            <div className="mb-2">
-              <div className={LABEL_CLS}>코어 공급 의지력</div>
-              <div className="text-[12px] font-medium">{String(supply)} 포인트</div>
-            </div>
-
-            {/* 코어 옵션 (등급 최대 포인트 이하만) */}
-            <div className={LABEL_CLS}>코어 옵션</div>
-            {list.length === 0 ? (
-              <div className="text-gray-500">옵션 정보가 없습니다.</div>
-            ) : (
-              <ul className="mt-1 space-y-1">
-                {list.map((e) => {
-                  const text = e.point === 17 ? pickSlashValueByGrade(e.text) : e.text;
-                  return (
-                    <li
-                      key={e.point}
-                      className="grid grid-cols-[32px_1fr] gap-x-1 items-start min-w-0"
-                    >
-                      {/* 왼쪽: 포인트 (고정폭, 우측정렬) */}
-                      <span className="w-[32px] shrink-0 text-amber-500 font-semibold">
-                        [{e.point}P]
-                      </span>
-                      {/* 오른쪽: 설명 (이 컬럼에서만 줄바꿈) */}
-                      <span className="text-gray-800 break-words min-w-0">
-                        {text}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </span>
-  );
-}
-
-
-
-
 
 function useToasts() {
   const [toasts, setToasts] = useState([]);
@@ -541,6 +425,7 @@ function useToasts() {
   const remove = (id) => setToasts(t => t.filter(x => x.id !== id));
   return { toasts, push, remove };
 }
+
 function ToastStack({ toasts, onClose }) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none px-4">
@@ -555,6 +440,7 @@ function ToastStack({ toasts, onClose }) {
     </div>
   );
 }
+
 function NumberInput({
   value, onChange, min, max, step = 1, allowFloat = false, zeroOnBlur = true, className = "", inputProps = {},
 }) {
@@ -610,15 +496,138 @@ function NumberInput({
   );
 }
 
-/* =============================== 메인 앱 =============================== */
+/* ──────────────────────────────────────────────────────────────────────────
+ * G. 프리셋 효과 툴팁
+ *    - 선택한 직업/그룹/프리셋 기준으로 등급 제한 내 효과를 미리보기
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function CoreEffectInfo({ job, groupKey, preset, grade, category, coreName, supply }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  const effects = getEffectsForPreset(job, groupKey, preset);
+  const maxP = TARGET_MAX_BY_GRADE[grade] ?? 999;
+  const list = effects.filter((e) => e.point <= maxP);
+
+  const coreShort =
+    GROUP_BY_CORE_NAME[coreName] ??
+    coreName.replace(/\s*코어$/, "");
+
+  const LABEL_CLS = "text-[12px] text-gray-500 mb-1 text-indigo-400";
+
+  const isAncient =
+    (CORE_LABEL?.[grade] ?? "").includes("고대") || String(grade).toLowerCase() === "ancient";
+
+  const gradeColorCls =
+    String(grade).toUpperCase() === "HERO" || (CORE_LABEL?.[grade] ?? "").includes("영웅") ? "text-fuchsia-500" :
+      String(grade).toUpperCase() === "LEGEND" || (CORE_LABEL?.[grade] ?? "").includes("전설") ? "text-amber-500" :
+        String(grade).toUpperCase() === "RELIC" || (CORE_LABEL?.[grade] ?? "").includes("유물") ? "text-orange-700" :
+          String(grade).toUpperCase() === "ANCIENT" || (CORE_LABEL?.[grade] ?? "").includes("고대") ? "text-[#d3bd8b]" :
+            "text-gray-800";
+
+  const pickSlashValueByGrade = (text) => {
+    const pickRight = isAncient;
+
+    let out = text.replace(
+      /(\d+(?:\.\d+)?)%\s*\/\s*(\d+(?:\.\d+)?)%/g,
+      (_, a, b) => (pickRight ? b : a) + "%"
+    );
+
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(%)/g,
+      (_, a, b, pct) => (pickRight ? b : a) + pct
+    );
+
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)(?!\s*[%\d])/g,
+      (_, a, b) => (pickRight ? b : a)
+    );
+
+    return out;
+  };
+
+  return (
+    <span
+      ref={ref}
+      className="relative inline-flex items-center align-top ml-1 cursor-pointer"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      <Info size={16} aria-hidden="true" color="#a399f2" />
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className="absolute z-[999999] mt-2 left-1/2 -translate-x-1/2 w-[400px] rounded-xl border bg-white shadow-lg p-3 text-xs"
+            role="tooltip"
+          >
+            <div className="text-[13px] font-semibold mb-2">
+              <div>{CATEGORY_LABEL[category]}의 {coreName} : {preset}</div>
+              <div className={`text-[12px] font-medium ${gradeColorCls}`}>{CORE_LABEL[grade]} 아크 그리드 코어</div>
+            </div>
+
+            <div className="mb-2">
+              <div className={LABEL_CLS}>코어 타입</div>
+              <div className="text-[12px] font-medium">
+                <span>{CATEGORY_LABEL[category]}</span>
+                <span className="mx-1">–</span>
+                <span>{coreShort}</span>
+              </div>
+            </div>
+
+            <div className="mb-2">
+              <div className={LABEL_CLS}>코어 공급 의지력</div>
+              <div className="text-[12px] font-medium">{String(supply)} 포인트</div>
+            </div>
+
+            <div className={LABEL_CLS}>코어 옵션</div>
+            {list.length === 0 ? (
+              <div className="text-gray-500">옵션 정보가 없습니다.</div>
+            ) : (
+              <ul className="mt-1 space-y-1">
+                {list.map((e) => {
+                  const text = e.point === 17 ? pickSlashValueByGrade(e.text) : e.text;
+                  return (
+                    <li
+                      key={e.point}
+                      className="grid grid-cols-[32px_1fr] gap-x-1 items-start min-w-0"
+                    >
+                      <span className="w-[32px] shrink-0 text-amber-500 font-semibold">
+                        [{e.point}P]
+                      </span>
+                      <span className="text-gray-800 break-words min-w-0">
+                        {text}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </span>
+  );
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * H. 메인 컴포넌트
+ *    - 상태/로직/뷰 그대로 유지
+ *    - 내부에 QuickAddPad 폼 컴포넌트 포함
+ * ────────────────────────────────────────────────────────────────────────── */
+
 export default function LoACoreOptimizer() {
   useEffect(() => { document.title = "로아 아크그리드 젬 장착 헬퍼"; }, []);
 
-  // 현재 카테고리
-  const [category, setCategory] = useState/** @type {Category} */(
+  const [category, setCategory] = useState(
     () => (loadFromStorage()?.category ?? "order")
   );
-  // 카테고리별 상태
   const [coresByCat, setCoresByCat] = useState(() => {
     const loaded = loadFromStorage();
     return loaded?.coresByCat ?? { order: [], chaos: [] };
@@ -628,8 +637,7 @@ export default function LoACoreOptimizer() {
     return loaded?.gemsByCat ?? { order: [], chaos: [] };
   });
 
-  // 기타 상태
-  const [role, setRole] = useState/** @type {Role|null} */(null);
+  const [role, setRole] = useState(null);
   const [weights, setWeights] = useState({ ...DEFAULT_WEIGHTS });
   const [highlightCoreId, setHighlightCoreId] = useState(null);
   const [highlightGemId, setHighlightGemId] = useState(null);
@@ -640,15 +648,13 @@ export default function LoACoreOptimizer() {
   const [stale, setStale] = useState(false);
   const didMountRef = useRef(false);
 
-  // 현재 카테고리별 단축
   const cores = coresByCat[category];
   const gems = gemsByCat[category];
-  // ✅ [추가] 커스텀 훅을 호출하여 계산 관련 로직을 모두 위임합니다.
+
   const { isComputing, progress, results, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights);
-  // ★ 선택한 직업 (질서에서만 사용)
+
   const [selectedJob, setSelectedJob] = useState(() => (loadFromStorage()?.selectedJob ?? ""));
 
-  // === JSON 백업/복원 ===
   const fileInputRef = useRef(null);
 
   const buildSnapshot = useCallback(() => ({
@@ -663,34 +669,33 @@ export default function LoACoreOptimizer() {
     selectedJob,
   }), [category, coresByCat, gemsByCat, role, weights, selectedJob]);
 
-const handleExportJson = useCallback(() => {
-  try {
-    const data = buildSnapshot();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const d = new Date();
-    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+  const handleExportJson = useCallback(() => {
+    try {
+      const data = buildSnapshot();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const d = new Date();
+      const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
 
-    // 직업명이 있을 때만 파일명에 추가 (불가 문자는 제거)
-    const jobPart =
-      selectedJob && selectedJob.trim()
-        ? `_${selectedJob.trim().replace(/[\\/:*?"<>|]+/g, "")}`
-        : "";
+      // 직업명이 있을 때만 파일명에 추가 (불가 문자는 제거)
+      const jobPart =
+        selectedJob && selectedJob.trim()
+          ? `_${selectedJob.trim().replace(/[\\/:*?"<>|]+/g, "")}`
+          : "";
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `아크그리드${jobPart}_${stamp}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    push("JSON 파일로 내보냈습니다.");
-  } catch (e) {
-    console.error(e);
-    push("내보내기 중 오류가 발생했어요.");
-  }
-}, [buildSnapshot, push, selectedJob]);
-
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `아크그리드${jobPart}_${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      push("JSON 파일로 내보냈습니다.");
+    } catch (e) {
+      console.error(e);
+      push("내보내기 중 오류가 발생했어요.");
+    }
+  }, [buildSnapshot, push, selectedJob]);
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -698,7 +703,6 @@ const handleExportJson = useCallback(() => {
 
   const handleImportFile = useCallback((e) => {
     const file = e.target.files?.[0];
-    // 같은 파일 다시 선택 가능하도록 초기화
     e.target.value = "";
     if (!file) return;
 
@@ -708,11 +712,10 @@ const handleExportJson = useCallback(() => {
         const json = JSON.parse(String(reader.result));
         if (!json || typeof json !== "object") throw new Error("invalid");
         if (!json.coresByCat || !json.gemsByCat) throw new Error("missing fields");
-        // 한 프레임에 동기 커밋해서 UI 즉시 반영
         flushSync(() => {
           setCoresByCat(json.coresByCat);
           setGemsByCat(json.gemsByCat);
-          setCategory(json.category === "chaos" ? "chaos" : "order"); // 안전망
+          setCategory(json.category === "chaos" ? "chaos" : "order");
           setRole(json.role === "dealer" || json.role === "support" ? json.role : null);
           setWeights(json.weights ? sanitizeWeights(json.weights) : { ...DEFAULT_WEIGHTS });
           setSelectedJob(typeof json.selectedJob === "string" ? json.selectedJob : "");
@@ -721,10 +724,8 @@ const handleExportJson = useCallback(() => {
           setQuickAddMode(false);
           setStale(true);
         });
-        // DnD/입력 내부 캐시 초기화를 위한 강제 리마운트 트리거
         setDataVersion(v => v + 1);
         push("JSON 데이터를 불러왔습니다.");
-
       } catch (err) {
         console.error(err);
         push("가져오기 실패: JSON 형식이 올바르지 않아요.");
@@ -734,16 +735,12 @@ const handleExportJson = useCallback(() => {
     reader.readAsText(file);
   }, [push, setCoresByCat, setGemsByCat, setCategory, setRole, setWeights, setSelectedJob]);
 
-
-
-  // ✅ [추가] 계산 결과(results)가 바뀔 때마다 stale 상태를 false로 업데이트합니다.
   useEffect(() => {
     if (results && results.length > 0) {
       setStale(false);
     }
   }, [results]);
 
-  // 현재 카테고리에 대해서만 set 하는 헬퍼
   const setCores = (updater) => {
     setCoresByCat((prev) => {
       const next = typeof updater === "function" ? updater(prev[category]) : updater;
@@ -777,7 +774,6 @@ const handleExportJson = useCallback(() => {
     return next;
   });
 
-  // 직업/코어 이름 변경 시 preset을 유효/기본값으로 자동 동기화
   useEffect(() => {
     if (category !== "order" || !selectedJob) return;
 
@@ -786,8 +782,8 @@ const handleExportJson = useCallback(() => {
       let changed = false;
 
       const next = list.map((c) => {
-        const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해" | "달" | "별"
-        const items = getPresetItems(selectedJob, groupKey); // [{ value, label }, ...]
+        const groupKey = GROUP_BY_CORE_NAME[c.name];
+        const items = getPresetItems(selectedJob, groupKey);
         const isValid = c.preset && items.some((i) => i.value === c.preset);
         const nextPreset = isValid ? c.preset : (items[0]?.value ?? undefined);
 
@@ -798,13 +794,11 @@ const handleExportJson = useCallback(() => {
         return c;
       });
 
-      if (!changed) return prevByCat;          // 변경 없으면 no-op (재렌더/루프 방지)
-      setStale(true);                           // 보수적 갱신: 필요 없으면 이 줄은 빼도 됩니다
+      if (!changed) return prevByCat;
+      setStale(true);
       return { ...prevByCat, [category]: next };
     });
   }, [category, selectedJob, cores, setCoresByCat, setStale]);
-
-
 
   const resetWeights = () => setWeights({ ...DEFAULT_WEIGHTS });
   const addGem = () => {
@@ -848,8 +842,6 @@ const handleExportJson = useCallback(() => {
     }
     return cs.map(c => c.id === id ? { ...c, ...patch } : c);
   });
-
-  // Drag state (for backdrop blur toggle)
   // eslint-disable-next-line
   const [dragging, setDragging] = useState(false);
   const onDragStart = () => {
@@ -868,7 +860,6 @@ const handleExportJson = useCallback(() => {
     });
   };
 
-  // UI tokens
   const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
   const card = "bg-white rounded-2xl shadow-sm";
@@ -877,7 +868,6 @@ const handleExportJson = useCallback(() => {
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
 
-  // Self-tests (optional)
   useEffect(() => {
     function runSelfTests() {
       try {
@@ -901,7 +891,6 @@ const handleExportJson = useCallback(() => {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights, selectedJob });
   }, [category, coresByCat, gemsByCat, role, weights, selectedJob]);
 
-  // === 빠른 추가 패드 (LoACoreOptimizer 내부에 선언) ===
   function QuickAddPad({ onAdd, focusOnMount = false }) {
     const [o1k, setO1k] = useState("atk");
     const [o2k, setO2k] = useState("add");
@@ -911,10 +900,9 @@ const handleExportJson = useCallback(() => {
     const [point, setPoint] = useState(1);
 
     const firstRef = useRef(null);
-    const focusAfterSubmitRef = useRef(false); // ✅ 포커스 복귀 조건 플래그
+    const focusAfterSubmitRef = useRef(false);
     const WILL_INPUT_ID = "quick-pad-will-input";
 
-    // (옵션) 퀵패드가 켜질 때만 최초 1회 포커싱하고 싶다면 true로
     useEffect(() => {
       if (!focusOnMount) return;
       requestAnimationFrame(() => {
@@ -948,17 +936,15 @@ const handleExportJson = useCallback(() => {
         o2v: Number.isFinite(o2v) ? o2v : 0,
       });
 
-      // ✅ 엔터/버튼으로 제출한 경우에만 포커스 복귀
       if (focusAfterSubmitRef.current) {
         focusWill();
         focusAfterSubmitRef.current = false;
       }
     };
 
-    // 엔터로 제출할 때만 플래그 ON
     const onKeyDownSubmit = (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
-        focusAfterSubmitRef.current = true; // ✅ 엔터 제출
+        focusAfterSubmitRef.current = true;
         handleSubmit(e);
       }
     };
@@ -970,7 +956,6 @@ const handleExportJson = useCallback(() => {
             <Plus size={18} />
           </div>
 
-          {/* 의지력 / 포인트 */}
           <div className="w-full lg:w-auto flex flex-row gap-2 lg:gap-3 flex-1 lg:flex-none">
             <div className="flex flex-col flex-1 min-w-0 lg:w-auto lg:flex-none">
               <label className={labelCls}>필요 의지력</label>
@@ -1006,7 +991,6 @@ const handleExportJson = useCallback(() => {
             </div>
           </div>
 
-          {/* 옵션 1 */}
           <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
             <div className="flex-1 lg:flex-none min-w-0">
               <label className={labelCls}>옵션 1</label>
@@ -1033,7 +1017,6 @@ const handleExportJson = useCallback(() => {
             </div>
           </div>
 
-          {/* 옵션 2 */}
           <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
             <div className="flex-1 lg:flex-none min-w-0">
               <label className={labelCls}>옵션 2</label>
@@ -1060,11 +1043,9 @@ const handleExportJson = useCallback(() => {
             </div>
           </div>
 
-          {/* 액션 */}
           <div className="top-2 right-2 lg:top-auto lg:right-auto lg:ml-auto w-auto lg:flex-none">
             <button
               type="submit"
-              // ✅ 버튼 클릭으로 제출할 때만 포커스 복귀 플래그 ON
               onClick={() => { (focusAfterSubmitRef.current = true); }}
               className="h-10 w-full lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
               title="Enter로도 추가 가능"
@@ -1075,7 +1056,6 @@ const handleExportJson = useCallback(() => {
           </div>
         </div>
 
-        {/* Divider */}
         <div className="relative flex items-center my-4">
           <div className="flex-grow border-t"></div>
           <span className="mx-3 text-sm text-gray-600">
@@ -1092,7 +1072,6 @@ const handleExportJson = useCallback(() => {
       backgroundImage: "linear-gradient(125deg, #85d8ea, #a399f2)",
       backgroundAttachment: 'fixed'
     }}>
-      {/* 전역 스타일 토큰 */}
       <style>{`
         :root{ --primary:#a399f2; --grad:linear-gradient(125deg,#85d8ea,#a399f2); }
         .btn-primary{ background: #000000; color:#fff; border:none; }
@@ -1105,14 +1084,12 @@ const handleExportJson = useCallback(() => {
       <style>{`button{cursor:pointer}`}</style>
 
       <div key={dataVersion} className="max-w-6xl mx-auto space-y-4 lg:space-y-6">
-        {/* 헤더/카테고리 토글 */}
         <section className="py-2 lg:py-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <h1 className="text-xl lg:text-2xl font-bold leading-tight text-white drop-shadow text-center lg:text-left w-full lg:w-auto">
               로아 아크그리드 젬 장착 도우미
             </h1>
             <div className="flex items-center gap-2 w-auto ml-auto lg:ml-0">
-              {/* │ 저장/불러오기 고정 툴바 │ */}
               <button
                 type="button"
                 onClick={handleExportJson}
@@ -1131,7 +1108,6 @@ const handleExportJson = useCallback(() => {
                 <Upload size={16} />
                 <span className="hidden md:inline text-sm">불러오기</span>
               </button>
-              {/* 숨김 파일 입력(항상 마운트) */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1158,19 +1134,16 @@ const handleExportJson = useCallback(() => {
           </div>
         </section>
 
-        {/* 코어 입력 & 우선순위(DnD/버튼 이동) */}
         <section className={`${card} p-4 lg:p-6 !mt-2`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>{CATEGORY_LABEL[category]} 코어 입력</h2>
             <div className="flex items-center gap-2 ml-auto whitespace-nowrap">
-              {/* 질서일 때만 직업 선택 노출 */}
               {category === "order" && (
                 <Dropdown
                   className="w-32"
                   value={selectedJob}
                   onChange={(val) => {
                     setSelectedJob(val);
-                    // 직업이 바뀌는 그 이벤트 안에서 preset을 즉시 보정
                     setCores(prev => prev.map(c => {
                       const groupKey = GROUP_BY_CORE_NAME[c.name];
                       const items = getPresetItems(val, groupKey);
@@ -1204,7 +1177,7 @@ const handleExportJson = useCallback(() => {
                       let coreNameItems = CORE_NAME_ITEMS.map(it => ({ ...it }));
 
                       if (category === "order" && selectedJob) {
-                        const allowed = getAllowedCoreNameSet(selectedJob); // "해/달/별 코어" 셋
+                        const allowed = getAllowedCoreNameSet(selectedJob);
                         coreNameItems = coreNameItems.map(it => ({
                           ...it,
                           disabled: takenNames.has(it.value) || !allowed.has(it.value)
@@ -1231,7 +1204,7 @@ const handleExportJson = useCallback(() => {
                                   className="w-full lg:w-24"
                                   value={c.grade}
                                   onChange={(val) => {
-                                    const g = /** @type {CoreGrade} */(val);
+                                    const g = (val);
                                     const maxAllowed = TARGET_MAX_BY_GRADE[g];
                                     const nextMin =
                                       (c.minThreshold != null && c.minThreshold > maxAllowed)
@@ -1245,9 +1218,8 @@ const handleExportJson = useCallback(() => {
                               </div>
                               {category === "order" && selectedJob && (
                                 (() => {
-                                  const groupKey = GROUP_BY_CORE_NAME[c.name]; // "해"|"달"|"별"
+                                  const groupKey = GROUP_BY_CORE_NAME[c.name];
                                   const presetItems = getPresetItems(selectedJob, groupKey);
-                                  // 렌더 시점에 유효성 검사해서 표시값 확정
                                   const resolvedPreset =
                                     c.preset && presetItems.some(i => i.value === c.preset)
                                       ? c.preset
@@ -1314,13 +1286,11 @@ const handleExportJson = useCallback(() => {
           </div>
         </section>
 
-        {/* 젬 입력 */}
         <section className={`${card} p-4 lg:p-6`}>
           <div
             className={`flex items-center gap-2 lg:gap-3 ${quickAddMode ? '' : 'mb-3'}`}
           >
             <h2 className={sectionTitle}>{CATEGORY_LABEL[category]} 젬 입력</h2>
-            {/* 빠르게 추가 모드 스위치 */}
             <div className="flex items-center gap-2 ml-1">
               <span className="text-xs text-gray-600">빠르게 추가</span>
               <button
@@ -1350,15 +1320,14 @@ const handleExportJson = useCallback(() => {
               Tab 키로 입력 칸을 이동할 수 있고, Enter 키로 빠르게 추가할 수 있습니다.
             </p>
           )}
-          {/* 빠른 추가 패드 */}
           {quickAddMode && (
             <div className="mb-3">
               <QuickAddPad
                 focusOnMount
                 onAdd={(gem) => {
-                  setGems(v => [gem, ...v]);     // 맨 위로 추가
-                  setHighlightGemId(gem.id);     // 하이라이트
-                  setStale(true);                // 재계산 유도
+                  setGems(v => [gem, ...v]);
+                  setHighlightGemId(gem.id);
+                  setStale(true);
                 }}
               />
             </div>
@@ -1398,7 +1367,7 @@ const handleExportJson = useCallback(() => {
                 <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                   <div className="flex-1 lg:flex-none min-w-0">
                     <label className={labelCls}>옵션 1</label>
-                    <Dropdown className="w-full lg:w-44" value={g.o1k} onChange={(val) => updateGem(g.id, { o1k: /** @type {OptionKey} */(val) })} items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))} placeholder="옵션 선택" />
+                    <Dropdown className="w-full lg:w-44" value={g.o1k} onChange={(val) => updateGem(g.id, { o1k: (val) })} items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))} placeholder="옵션 선택" />
                   </div>
                   <div className="flex-1 lg:flex-none">
                     <label className={labelCls}>수치</label>
@@ -1417,7 +1386,7 @@ const handleExportJson = useCallback(() => {
                 <div className="flex items-end gap-2 w-full lg:w-auto lg:flex-none min-w-0">
                   <div className="flex-1 lg:flex-none min-w-0">
                     <label className={labelCls}>옵션 2</label>
-                    <Dropdown className="w-full lg:w-44" value={g.o2k} onChange={(val) => updateGem(g.id, { o2k: /** @type {OptionKey} */(val) })} items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))} placeholder="옵션 선택" />
+                    <Dropdown className="w-full lg:w-44" value={g.o2k} onChange={(val) => updateGem(g.id, { o2k: (val) })} items={OPTIONS.map(k => ({ value: k, label: OPTION_LABELS[k] }))} placeholder="옵션 선택" />
                   </div>
                   <div className="flex-1 lg:flex-none">
                     <label className={labelCls}>수치</label>
@@ -1442,7 +1411,6 @@ const handleExportJson = useCallback(() => {
           </div>
         </section>
 
-        {/* 유효옵션 가중치 */}
         <section className={`${card} p-4 lg:p-6`}>
           <div className="flex items-center gap-2 lg:gap-3">
             <h2 className={sectionTitle}>유효옵션 가중치</h2>
@@ -1497,7 +1465,6 @@ const handleExportJson = useCallback(() => {
           </div>
         </section>
 
-        {/* 하단 계산 액션/알림 */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-2">
           {stale && !isComputing && hasCalculated && (
             <span className="inline-block text-[11px] px-3 py-1.5 rounded-lg bg-red-100 text-red-800 border border-red-200 text-center lg:text-left">
@@ -1516,7 +1483,6 @@ const handleExportJson = useCallback(() => {
           </div>
         </div>
 
-        {/* 결과 */}
         <section className={`${card} p-4 lg:p-6`}>
           <h2 className={sectionTitle}>결과</h2>
           <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
@@ -1538,7 +1504,6 @@ const handleExportJson = useCallback(() => {
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <div className="text-base font-semibold">
                       {c.name}
-                      {/* ★ 선택한 직업 코어 표시: 질서 + 직업 선택 + 프리셋 있을 때 */}
                       {category === "order" && selectedJob && (c.preset || presetFallback) && (
                         <>:&nbsp;{c.preset ?? presetFallback}</>
                       )}&nbsp;
@@ -1567,7 +1532,6 @@ const handleExportJson = useCallback(() => {
                     </div>
                   ) : (
                     <>
-                      {/* Desktop table */}
                       <div className="hidden lg:block overflow-x-auto mt-2">
                         <table className="min-w-full text-sm">
                           <colgroup>
@@ -1607,7 +1571,6 @@ const handleExportJson = useCallback(() => {
                         </table>
                       </div>
 
-                      {/* Mobile cards */}
                       <div className="lg:hidden mt-2 space-y-2">
                         {pick.list.map(g => {
                           const gi = gems.findIndex(x => x.id === g.id);
@@ -1646,13 +1609,11 @@ const handleExportJson = useCallback(() => {
         <KakaoAdfit />
       </div>
 
-      {/* 전역 오버레이 진행바 */}
       {isComputing && (
         <div className="fixed inset-0 z-[99999] bg-black/35 backdrop-blur-[1px] flex items-center justify-center px-6">
           <div className="w-full max-w-md rounded-2xl bg-white/95 border shadow p-4">
             <div className="text-sm font-medium text-gray-800 mb-2">{progress.label}</div>
 
-            {/* 진행바 */}
             <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
               {progress.indeterminate ? (
                 <div className="absolute inset-0">
@@ -1666,7 +1627,6 @@ const handleExportJson = useCallback(() => {
               )}
             </div>
 
-            {/* 퍼센트 영역: 결정형이면 % / 비결정형이면 pulse 숫자 */}
             <div className="mt-2 text-right text-xs text-gray-600">
               {progress.indeterminate
                 ? (progress.pulse != null ? Number(progress.pulse).toLocaleString() : "")
