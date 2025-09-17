@@ -127,21 +127,18 @@ function InquiryModal({ open, onClose }) {
         images.push({ name: f.name, type: f.type, data });
       }
 
+      const fd = new FormData();
+      fd.append("title", title.trim().slice(0, 80));
+      fd.append("content", body.trim().slice(0, 4000));
+      fd.append("meta", JSON.stringify({
+        route: window.location.hash || "",
+        ua: navigator.userAgent || "",
+        app: "LoA-Core",
+      }));
+      files.forEach((f) => fd.append("files[]", f, f.name));
+     
       const url = `${endpoint}${apiKey ? `?key=${encodeURIComponent(apiKey)}` : ""}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim().slice(0, 80),
-          content: body.trim().slice(0, 4000),
-          images, // 여러 장 첨부
-          meta: {
-            route: window.location.hash || "",
-            ua: navigator.userAgent || "",
-            app: "LoA-Core",
-          },
-        }),
-      });
+      const res = await fetch(url, { method: "POST", body: fd }); // Content-Type 수동 지정 X
       const data = await res.json().catch(() => ({}));
       if (data?.ok) {
         alert("디스코드로 전송되었습니다. 감사합니다!");

@@ -1,0 +1,7 @@
+name = "arcgrid-discord-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+# 프론트 도메인(쉼표로 여러 개) — GH Pages + 로컬
+ALLOW_ORIGINS = "https://sunnypop424.github.io,http://localhost:5173"

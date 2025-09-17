@@ -1,8 +1,9 @@
+# .github/workflows/gh-pages.yml
 name: Build & Deploy (Vite → GitHub Pages)
 
 on:
   push:
-    branches: [ main ]   # ← 메인 브랜치 이름이 다르면 바꿔주세요
+    branches: [ main ]
 
 permissions:
   contents: read
@@ -12,7 +13,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: github-pages   # ✅ 이 줄 추가!
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,7 +27,6 @@ jobs:
           echo "VITE_DISCORD_API_KEY=${{ secrets.VITE_DISCORD_API_KEY }}" >> .env.production
 
       - run: npm run build
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
@@ -37,5 +37,4 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
