@@ -51,10 +51,6 @@ function InquiryModal({ open, onClose }) {
     (typeof window !== "undefined" && window.__ARCGRID_API_KEY__) ||
     "";
 
-    // InquiryModal 내부에 임시로
-    console.log("endpoint =", endpoint);
-    console.log("apiKey   =", apiKey);
-
   const MAX_FILES = 4;
   const PER_FILE = 4 * 1024 * 1024;  // 4MB
   const TOTAL = 16 * 1024 * 1024; // 16MB
@@ -169,7 +165,7 @@ function InquiryModal({ open, onClose }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white border shadow-xl p-4 sm:p-5"
+        className="w-full max-w-lg rounded-2xl bg-white shadow-xl p-4 sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
