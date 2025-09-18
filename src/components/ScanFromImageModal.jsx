@@ -291,7 +291,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
               <span>{file ? "다른 이미지 선택" : "스크린샷 선택"}</span>
             </button>
 
-            <div className="flex items-center gap-2 ml-2 lg:ml-24">
+            <div className="flex items-center gap-2 ml-2">
               <span className="text-xs text-gray-600">드래그 모드</span>
               <button
                 type="button"
