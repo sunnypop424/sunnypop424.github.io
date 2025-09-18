@@ -150,6 +150,13 @@ function nextAvailableCoreName(existingNames) {
   return null;
 }
 
+// 딜러: 0.123%  /  서포터: 0.123  (둘 다 소수 3자리)
+function fmtByRole(role, v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return role === 'dealer' ? `${n.toFixed(3)}%` : n.toFixed(3);
+}
+
 function maskWeightsForRole(prev, role) {
   const next = { ...prev };
   const zeroSet = role === "dealer" ? ROLE_KEYS.support : ROLE_KEYS.dealer;
@@ -1446,36 +1453,7 @@ export default function LoACoreOptimizer() {
 
 
 <p className="text-[12px] text-gray-600 mt-2">
-  가중치는 역할 프리셋으로 고정됩니다. 아래는 <b>옵션 레벨 → 퍼센트 매핑</b>입니다.
-  {role === "support" && (
-    <>
-      <br />
-      <span className="text-[12px] text-rose-700">
-        서포터의 현재 유효 옵션 가중치는 정확한 값을 몰라 <b>임시로 1</b>로 넣어두었습니다.
-      </span>
-      <br />
-      <span className="text-[12px] text-rose-700">
-        정확한 수치를 아시는 분은 <b>연락 부탁드립니다.</b>
-      </span>
-    </>
-  )}
-  {role === "dealer" && (
-    <>
-      <br />
-      <span className="text-[12px] text-indigo-700">
-        딜러의 현재 유효 옵션 가중치는{" "}
-        <a
-          href="https://youtu.be/1EHrPm50_Ig?si=K31gdkMqVI0S4CLv&t=1002"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline"
-        >
-          포피셜 유튜브 영상
-        </a>
-        을 참고했습니다. <span className="text-gray-500">(약 16:42 지점)</span>
-      </span>
-    </>
-  )}
+  가중치는 역할 프리셋으로 고정됩니다. 
 </p>
 
 {/* 옵션별 L1~L5 퍼센트 표 (반응형) */}
@@ -1523,17 +1501,10 @@ export default function LoACoreOptimizer() {
               <tr key={k} className="border-t">
                 <td className="py-2">
                   <span className="font-medium">{OPTION_LABELS[k]}</span>
-                  <span
-                    className={`ml-2 text-[11px] ${
-                      isCurve ? "text-primary" : "text-gray-400"
-                    }`}
-                  >
-                    {isCurve ? "커브" : "선형"}
-                  </span>
                 </td>
                 {values.map((v, i) => (
                   <td key={i} className="py-2 tabular-nums">
-                    {Number(v).toFixed(3)}%
+                    {fmtByRole(role, v)}
                   </td>
                 ))}
               </tr>
@@ -1566,7 +1537,7 @@ export default function LoACoreOptimizer() {
                 >
                   <span className="text-gray-500">Lv. {i + 1}</span>
                   <span className="tabular-nums font-medium">
-                    {Number(v).toFixed(3)}%
+                    {fmtByRole(role, v)}
                   </span>
                 </div>
               ))}
@@ -1638,8 +1609,8 @@ export default function LoACoreOptimizer() {
                             </div>
                           );
                         })()}
-                        <div className={chip}>{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "}
-                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(3))}%</span></div>
+                        <div className={chip}>{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "유효 옵션 합 " : "유효 옵션 합 "}
+                          <span className="font-semibold text-primary">{String(pick.roleSum.toFixed(3))}{role === 'dealer' ? "%" : ""}</span></div>
                       </div>
                     )}
                   </div>
@@ -1666,7 +1637,7 @@ export default function LoACoreOptimizer() {
                               <th className="px-2 py-2">포인트</th>
                               <th className="px-2 py-2">옵션1</th>
                               <th className="px-2 py-2">옵션2</th>
-                              <th className="px-2 py-2">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "예상 지원 증가량 (젬) " : "유효 옵션 합 "}</th>
+                              <th className="px-2 py-2">{role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "유효 옵션 합 " : "유효 옵션 합 "}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1680,7 +1651,7 @@ export default function LoACoreOptimizer() {
                                   <td className="px-2 py-2">{String(g.point ?? 0)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o1k]} {String(g.o1v)}</td>
                                   <td className="px-2 py-2">{OPTION_LABELS[g.o2k]} {String(g.o2v)}</td>
-                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(3))}%</td>
+                                  <td className="px-2 py-2 text-primary">{String(scoreGemForRole(g, role, sanitizeWeights(weights)).toFixed(3))}{role === 'dealer' ? "%" : ""}</td>
                                 </tr>
                               );
                             })}

@@ -52,6 +52,16 @@ export const DEALER_LEVEL_CURVES = {
   atk:  [0, 0.029, 0.067, 0.105, 0.134, 0.172], // 공격력
 };
 
+/** 서포터: 옵션 레벨 → 유효율(커브) */
+export const SUPPORT_LEVEL_CURVES = {
+  // 낙인력
+  brand:   [0, 0.167, 0.334, 0.501, 0.668, 0.835],
+  // 아군 공격 강화
+  allyAtk: [0, 0.130, 0.260, 0.390, 0.520, 0.650],
+  // 아군 피해 강화
+  allyDmg: [0, 0.052, 0.104, 0.156, 0.208, 0.260],
+};
+
 /* =============================== 유틸/헬퍼 =============================== */
 export function roleAllowsKey(role, key) {
   const allow = ROLE_KEYS?.[role];
@@ -75,10 +85,18 @@ export function sanitizeWeights(w) {
 
 export function levelValueByRole(role, key, lvl) {
   const L = Math.max(0, Math.min(5, Number(lvl) || 0));
+
+  // 딜러: 사전 정의된 퍼센트 커브
   if (role === 'dealer' && DEALER_LEVEL_CURVES[key]) {
     return DEALER_LEVEL_CURVES[key][L] || 0;
   }
-  // 서포터(및 그 외): 선형 — 레벨 숫자 자체를 퍼센트로 사용
+
+  // 서포터: 사전 정의된 유효율 커브
+  if (role === 'support' && SUPPORT_LEVEL_CURVES[key]) {
+    return SUPPORT_LEVEL_CURVES[key][L] || 0;
+  }
+
+  // 그 외: 선형(레벨 숫자 그대로)
   return L;
 }
 
