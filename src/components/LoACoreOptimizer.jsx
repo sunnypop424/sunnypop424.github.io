@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useOptimizer } from '../hooks/useOptimizer';
 import KakaoAdfit from "./KakaoAdfit";
+import ScanFromImageModal from "./ScanFromImageModal.jsx";
 import './LoACoreOptimizer.css';
 
 import {
@@ -649,7 +650,7 @@ export default function LoACoreOptimizer() {
     const saved = loadFromStorage();
     const w = saved?.weights;
     if (w && typeof w === "object") {
-      const vals = ["atk","add","boss","brand","allyDmg","allyAtk"].map(k => Number(w[k]));
+      const vals = ["atk", "add", "boss", "brand", "allyDmg", "allyAtk"].map(k => Number(w[k]));
       const allOnes = vals.every(v => v === 1);
       // 과거 기본값(전부 1)만 저장돼 있고 역할 정보가 없거나 딜러로 추정되면 → 딜러 프리셋으로 이행
       if (allOnes && (!saved?.role || saved.role === "dealer")) {
@@ -664,6 +665,7 @@ export default function LoACoreOptimizer() {
   const [highlightGemId, setHighlightGemId] = useState(null);
   const { toasts, push, remove } = useToasts();
   const [quickAddMode, setQuickAddMode] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
 
   const [stale, setStale] = useState(false);
@@ -717,6 +719,18 @@ export default function LoACoreOptimizer() {
       push("내보내기 중 오류가 발생했어요.");
     }
   }, [buildSnapshot, push, selectedJob]);
+
+  const handleScanned = useCallback((payload) => {
+    setScanOpen(false);
+    // 최소: 결과 확인
+    console.log("[ScanFromImageModal:onScanned]", payload);
+
+    // (선택) payload.joinedLines / payload.lines 를 파싱해 젬 자동 추가할 수 있어요.
+    // 예시 스텁:
+    // const gem = { id: uid(), will: 5, point: 3, o1k: 'atk', o1v: 3, o2k: 'add', o2v: 2 };
+    // setGems(v => [gem, ...v]);
+    // setHighlightGemId(gem.id);
+  }, []);
 
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -1316,6 +1330,14 @@ export default function LoACoreOptimizer() {
               {!quickAddMode && (
                 <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={addGem} aria-label="젬 추가"><Plus size={16} /><span className="hidden lg:inline"> 젬 추가</span></button>
               )}
+              <button
+                className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+                onClick={() => setScanOpen(true)}
+                aria-label="이미지에서 스캔"
+              >
+                {/* lucide 아이콘 원하면 추가 가능: <ScanLine size={16} /> */}
+                <span className="px-2">이미지에서 스캔</span>
+              </button>
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={() => setGems([])} aria-label="전체 삭제"><Trash2 size={16} /><span className="hidden lg:inline"> 전체 삭제</span></button>
             </div>
           </div>
@@ -1415,141 +1437,140 @@ export default function LoACoreOptimizer() {
           </div>
         </section>
 
-<section className={`${card} p-4 lg:p-6`}>
-  <div className="flex items-center gap-2 lg:gap-3">
-    <h2 className={sectionTitle}>유효 옵션 가중치</h2>
+        <section className={`${card} p-4 lg:p-6`}>
+          <div className="flex items-center gap-2 lg:gap-3">
+            <h2 className={sectionTitle}>유효 옵션 가중치</h2>
 
-  {/* 포지션 선택은 그대로 유지 */}
-  <div className={`flex items-center gap-4 text-sm`}>
-    <span className="text-xs text-gray-500 hidden sm:block">포지션 선택</span>
-    <label className="inline-flex items-center gap-2">
-      <input
-        type="radio"
-        name="role"
-        checked={role === "dealer"}
-        onChange={() => {
-          setRole("dealer");
-          setWeights({ ...DEALER_WEIGHTS });
-        }}
-        className="accent-primary"
-      />
-      딜러
-    </label>
-    <label className="inline-flex items-center gap-2">
-      <input
-        type="radio"
-        name="role"
-        checked={role === "support"}
-        onChange={() => {
-          setRole("support");
-          setWeights((w) => maskWeightsForRole(DEFAULT_WEIGHTS, "support"));
-        }}
-        className="accent-primary"
-      />
-      서포터
-    </label>
-  </div>
-  </div>
-
-
-<p className="text-[12px] text-gray-600 mt-2">
-  가중치는 역할 프리셋으로 고정됩니다. 
-</p>
-
-{/* 옵션별 L1~L5 퍼센트 표 (반응형) */}
-{(() => {
-  const levels = [1, 2, 3, 4, 5];
-  const allowSet =
-    role && ROLE_KEYS?.[role] && typeof ROLE_KEYS[role].has === "function"
-      ? ROLE_KEYS[role]
-      : null;
-
-  // 현재 역할에 해당하는 옵션만 노출 (역할 미선택이면 전체)
-  const showKeys = OPTIONS.filter((k) => !allowSet || allowSet.has(k));
-
-  const rows = showKeys.map((k) => {
-    const values = levels.map((L) => levelValueByRole(role, k, L));
-    const isCurve = role === "dealer"; // 딜러는 커브, 서포터는 선형
-    return { k, values, isCurve };
-  });
-
-  return (
-    <div className="mt-3">
-      {/* 데스크톱/태블릿: 표 형태 */}
-      <div className="hidden sm:block overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <colgroup>
-            <col width="18%" />
-            <col width="16%" />
-            <col width="16%" />
-            <col width="16%" />
-            <col width="16%" />
-            <col width="16%" />
-          </colgroup>
-          <thead>
-            <tr className="text-left text-gray-500">
-              <th className="py-2">옵션</th>
-              <th className="py-2">Lv. 1</th>
-              <th className="py-2">Lv. 2</th>
-              <th className="py-2">Lv. 3</th>
-              <th className="py-2">Lv. 4</th>
-              <th className="py-2">Lv. 5</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ k, values, isCurve }) => (
-              <tr key={k} className="border-t">
-                <td className="py-2">
-                  <span className="font-medium">{OPTION_LABELS[k]}</span>
-                </td>
-                {values.map((v, i) => (
-                  <td key={i} className="py-2 tabular-nums">
-                    {fmtByRole(role, v)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 모바일: 카드 + 칩 형태 */}
-      <div className="sm:hidden space-y-2">
-        {rows.map(({ k, values, isCurve }) => (
-          <div key={k} className="rounded-xl border p-3 bg-white">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">{OPTION_LABELS[k]}</div>
-              <span
-                className={`text-[11px] ${
-                  isCurve ? "text-primary" : "text-gray-400"
-                }`}
-              >
-                {isCurve ? "커브" : "선형"}
-              </span>
-            </div>
-
-            {/* L1~L5 그리드: 세로 스크롤 없이 한눈에 */}
-            <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
-              {values.map((v, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-gray-50 border"
-                >
-                  <span className="text-gray-500">Lv. {i + 1}</span>
-                  <span className="tabular-nums font-medium">
-                    {fmtByRole(role, v)}
-                  </span>
-                </div>
-              ))}
+            {/* 포지션 선택은 그대로 유지 */}
+            <div className={`flex items-center gap-4 text-sm`}>
+              <span className="text-xs text-gray-500 hidden sm:block">포지션 선택</span>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="role"
+                  checked={role === "dealer"}
+                  onChange={() => {
+                    setRole("dealer");
+                    setWeights({ ...DEALER_WEIGHTS });
+                  }}
+                  className="accent-primary"
+                />
+                딜러
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="role"
+                  checked={role === "support"}
+                  onChange={() => {
+                    setRole("support");
+                    setWeights((w) => maskWeightsForRole(DEFAULT_WEIGHTS, "support"));
+                  }}
+                  className="accent-primary"
+                />
+                서포터
+              </label>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
-  );
-})()}
 
-</section>
+
+          <p className="text-[12px] text-gray-600 mt-2">
+            가중치는 역할 프리셋으로 고정됩니다.
+          </p>
+
+          {/* 옵션별 L1~L5 퍼센트 표 (반응형) */}
+          {(() => {
+            const levels = [1, 2, 3, 4, 5];
+            const allowSet =
+              role && ROLE_KEYS?.[role] && typeof ROLE_KEYS[role].has === "function"
+                ? ROLE_KEYS[role]
+                : null;
+
+            // 현재 역할에 해당하는 옵션만 노출 (역할 미선택이면 전체)
+            const showKeys = OPTIONS.filter((k) => !allowSet || allowSet.has(k));
+
+            const rows = showKeys.map((k) => {
+              const values = levels.map((L) => levelValueByRole(role, k, L));
+              const isCurve = role === "dealer"; // 딜러는 커브, 서포터는 선형
+              return { k, values, isCurve };
+            });
+
+            return (
+              <div className="mt-3">
+                {/* 데스크톱/태블릿: 표 형태 */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <colgroup>
+                      <col width="18%" />
+                      <col width="16%" />
+                      <col width="16%" />
+                      <col width="16%" />
+                      <col width="16%" />
+                      <col width="16%" />
+                    </colgroup>
+                    <thead>
+                      <tr className="text-left text-gray-500">
+                        <th className="py-2">옵션</th>
+                        <th className="py-2">Lv. 1</th>
+                        <th className="py-2">Lv. 2</th>
+                        <th className="py-2">Lv. 3</th>
+                        <th className="py-2">Lv. 4</th>
+                        <th className="py-2">Lv. 5</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map(({ k, values, isCurve }) => (
+                        <tr key={k} className="border-t">
+                          <td className="py-2">
+                            <span className="font-medium">{OPTION_LABELS[k]}</span>
+                          </td>
+                          {values.map((v, i) => (
+                            <td key={i} className="py-2 tabular-nums">
+                              {fmtByRole(role, v)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 모바일: 카드 + 칩 형태 */}
+                <div className="sm:hidden space-y-2">
+                  {rows.map(({ k, values, isCurve }) => (
+                    <div key={k} className="rounded-xl border p-3 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">{OPTION_LABELS[k]}</div>
+                        <span
+                          className={`text-[11px] ${isCurve ? "text-primary" : "text-gray-400"
+                            }`}
+                        >
+                          {isCurve ? "커브" : "선형"}
+                        </span>
+                      </div>
+
+                      {/* L1~L5 그리드: 세로 스크롤 없이 한눈에 */}
+                      <div className="mt-2 grid grid-cols-2 gap-2 text-[12px]">
+                        {values.map((v, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-gray-50 border"
+                          >
+                            <span className="text-gray-500">Lv. {i + 1}</span>
+                            <span className="tabular-nums font-medium">
+                              {fmtByRole(role, v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+        </section>
 
 
 
@@ -1696,6 +1717,12 @@ export default function LoACoreOptimizer() {
       <div className="mt-6">
         <KakaoAdfit />
       </div>
+
+      <ScanFromImageModal
+        open={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScanned={handleScanned}
+      />
 
       {isComputing && (
         <div className="fixed inset-0 z-[99999] bg-black/35 backdrop-blur-[1px] flex items-center justify-center px-6">
