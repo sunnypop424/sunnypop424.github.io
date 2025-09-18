@@ -20,7 +20,7 @@
 import React, { useEffect, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { flushSync } from "react-dom";
 import { createPortal } from "react-dom";
-import { Plus, Trash2, ChevronUp, ChevronDown, Info, Download, Upload } from "lucide-react";
+import { Plus, Trash2, ChevronUp, ChevronDown, Info, Download, Upload, Image } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import { useOptimizer } from '../hooks/useOptimizer';
@@ -720,18 +720,6 @@ export default function LoACoreOptimizer() {
     }
   }, [buildSnapshot, push, selectedJob]);
 
-  const handleScanned = useCallback((payload) => {
-    setScanOpen(false);
-    // 최소: 결과 확인
-    console.log("[ScanFromImageModal:onScanned]", payload);
-
-    // (선택) payload.joinedLines / payload.lines 를 파싱해 젬 자동 추가할 수 있어요.
-    // 예시 스텁:
-    // const gem = { id: uid(), will: 5, point: 3, o1k: 'atk', o1v: 3, o2k: 'add', o2v: 2 };
-    // setGems(v => [gem, ...v]);
-    // setHighlightGemId(gem.id);
-  }, []);
-
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
@@ -786,13 +774,53 @@ export default function LoACoreOptimizer() {
       return { ...prev, [category]: next };
     });
   };
-  const setGems = (updater) => {
-    setGemsByCat((prev) => {
-      const next = typeof updater === "function" ? updater(prev[category]) : updater;
-      setStale(true);
-      return { ...prev, [category]: next };
-    });
-  };
+// 1) setGems를 useCallback으로 감싸서 참조를 안정화
+const setGems = useCallback((updater) => {
+  setGemsByCat((prev) => {
+    const base = prev[category] ?? []; // 안전하게 기본값
+    const next =
+      typeof updater === "function" ? updater(base) : updater;
+    setStale(true); // 여기서만 호출하면 handleScanned 말미의 중복 호출은 제거 가능
+    return { ...prev, [category]: next };
+  });
+}, [setGemsByCat, category, setStale]);
+
+// 2) mapScannedGemToItem도 안정화(선택이지만 권장)
+const mapScannedGemToItem = useCallback((g) => ({
+  id: uid(),
+  will: Number.isFinite(g?.will) ? g.will : null,
+  point: Number.isFinite(g?.point) ? g.point : null,
+  o1k: g?.opt1?.label ?? "atk",
+  o1v: Number.isFinite(g?.opt1?.level) ? g.opt1.level : 1,
+  o2k: g?.opt2?.label ?? "add",
+  o2v: Number.isFinite(g?.opt2?.level) ? g.opt2.level : 1,
+}), []);
+
+// 3) handleScanned deps에 안정화된 것들을 넣기
+const handleScanned = useCallback((payload) => {
+  setScanOpen(false);
+  console.log("[ScanFromImageModal:onScanned]", payload);
+
+  const scanned = Array.isArray(payload?.gems) ? payload.gems : [];
+  if (scanned.length === 0) {
+    push("스캔 결과가 비어 있어요.");
+    return;
+  }
+
+  const items = scanned.map(mapScannedGemToItem);
+
+  setGems((prev) => {
+    const next = [...prev, ...items]; // 뒤에 추가
+    return next;
+  });
+
+  const lastId = items[items.length - 1]?.id;
+  if (lastId) setHighlightGemId(lastId);
+
+  push(`${items.length}개의 젬을 목록에 추가했습니다.`);
+
+  // setStale(true); // ← setGems 내부에서 이미 호출하므로 중복이면 제거 권장
+}, [push, setScanOpen, setHighlightGemId, setGems, mapScannedGemToItem]);
 
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
@@ -1331,12 +1359,12 @@ export default function LoACoreOptimizer() {
                 <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={addGem} aria-label="젬 추가"><Plus size={16} /><span className="hidden lg:inline"> 젬 추가</span></button>
               )}
               <button
-                className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+                className="hidden lg:inline-flex h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border  items-center justify-center gap-2 bg-white hover:bg-white/90"
                 onClick={() => setScanOpen(true)}
-                aria-label="이미지에서 스캔"
+                aria-label="이미지에서 스캔 (Beta)"
               >
-                {/* lucide 아이콘 원하면 추가 가능: <ScanLine size={16} /> */}
-                <span className="px-2">이미지에서 스캔</span>
+                <Image size={16} />
+                <span className="hidden lg:inline"> 이미지에서 스캔 (Beta)</span>
               </button>
               <button className="h-10 w-10 lg:w-auto px-0 lg:px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90" onClick={() => setGems([])} aria-label="전체 삭제"><Trash2 size={16} /><span className="hidden lg:inline"> 전체 삭제</span></button>
             </div>
