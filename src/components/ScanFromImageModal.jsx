@@ -50,6 +50,13 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
   const [drag, setDrag] = useState(null); // {mode:'include'|'exclude', x0,y0,x1,y1} (wrap 기준)
   const [mode, setMode] = useState("include");
 
+  // 전처리 미리보기 URL들
+  const [previewUrls, setPreviewUrls] = useState({
+    roi: null,
+    left: null,
+    right: null,
+  });
+
   const wrapRef = useRef(null); // 이미지 컨테이너 (좌표 기준점)
   const imgRef = useRef(null);
   const inputRef = useRef(null);
@@ -62,6 +69,17 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
       return new Worker(new URL("../workers/gemScanner.worker.js", import.meta.url));
     }
   }, []);
+
+  // worker에서 받은 ArrayBuffer → ObjectURL
+  const bufToUrl = (buf, type = "image/png") =>
+    buf ? URL.createObjectURL(new Blob([buf], { type })) : null;
+
+  // 미리보기 URL 정리
+  useEffect(() => {
+    return () => {
+      Object.values(previewUrls).forEach((u) => u && URL.revokeObjectURL(u));
+    };
+  }, [previewUrls]);
 
   // 워커 메시지
   useEffect(() => {
@@ -113,6 +131,18 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
         });
         console.groupEnd();
 
+        // 4) 전처리 미리보기 URL 세팅
+        const next = {
+          roi: bufToUrl(payload?.roiPrePng, payload?.roiMime || "image/png"),
+          left: bufToUrl(payload?.previews?.leftPrePng, "image/png"),
+          right: bufToUrl(payload?.previews?.rightPrePng, "image/png"),
+        };
+        // 기존 URL revoke 후 교체
+        setPreviewUrls((prev) => {
+          Object.values(prev).forEach((u) => u && URL.revokeObjectURL(u));
+          return next;
+        });
+
         onScanned?.({ ...payload, parsed, gems });
       } else if (type === "error") {
         setBusy(false);
@@ -148,6 +178,11 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
     setExcludesRel([]);
     setTempExcludeRel(null);
     setDrag(null);
+    // 미리보기 URL도 초기화
+    setPreviewUrls((prev) => {
+      Object.values(prev).forEach((u) => u && URL.revokeObjectURL(u));
+      return { roi: null, left: null, right: null };
+    });
   };
 
   // 래퍼 기준 좌표 가져오기
@@ -315,7 +350,6 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
               </button>
             </div>
 
-
             <div className="ml-auto flex items-center gap-2">
               {/* 선택영역 초기화 */}
               <button
@@ -351,113 +385,145 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
 
           {/* 미리보기 + 오버레이 */}
           {imgURL ? (
-            <div className="relative border overflow-hidden max-h-[80vh] bg-gray-50">
-              <div
-                ref={wrapRef}
-                className="relative inline-block"
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-                onDragStart={(e) => e.preventDefault()}
-                style={{ cursor: "crosshair" }}
-              >
-                <img
-                  ref={imgRef}
-                  src={imgURL}
-                  alt="preview"
-                  className="block max-h-[80vh] w-auto select-none"
-                  onLoad={onImgLoad}
-                  draggable={false}
-                />
-
-                {/* 포함 ROI 표시 */}
-                {rectRel && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: rectRel.x,
-                      top: rectRel.y,
-                      width: rectRel.w,
-                      height: rectRel.h,
-                      border: "1px solid #6366f1",
-                      background: "rgba(99,102,241,0.18)",
-                      pointerEvents: "none",
-                      zIndex: 5,
-                    }}
+            <>
+              <div className="relative border overflow-hidden max-h-[80vh] bg-gray-50">
+                <div
+                  ref={wrapRef}
+                  className="relative inline-block"
+                  onMouseDown={onMouseDown}
+                  onMouseMove={onMouseMove}
+                  onMouseUp={onMouseUp}
+                  onDragStart={(e) => e.preventDefault()}
+                  style={{ cursor: "crosshair" }}
+                >
+                  <img
+                    ref={imgRef}
+                    src={imgURL}
+                    alt="preview"
+                    className="block max-h-[80vh] w-auto select-none"
+                    onLoad={onImgLoad}
+                    draggable={false}
                   />
-                )}
 
-                {/* 제외 영역들 */}
-                {excludesRel.map((r) => (
-                  <div
-                    key={r.id}
-                    style={{
-                      position: "absolute",
-                      left: r.x,
-                      top: r.y,
-                      width: r.w,
-                      height: r.h,
-                      border: "1px dashed #ef4444",
-                      background: "rgba(239,68,68,0.18)",
-                      pointerEvents: "none",
-                      zIndex: 6,
-                    }}
-                  >
-                    <div style={{ position: "absolute", right: -12, top: -12, pointerEvents: "auto" }}>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeExclude(r.id); }}
-                        className="h-6 w-6 rounded-full bg-white border shadow flex items-center justify-center"
-                        title="이 제외영역 삭제"
-                      >
-                        <MinusCircle size={16} className="text-rose-600" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  {/* 포함 ROI 표시 */}
+                  {rectRel && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: rectRel.x,
+                        top: rectRel.y,
+                        width: rectRel.w,
+                        height: rectRel.h,
+                        border: "1px solid #6366f1",
+                        background: "rgba(99,102,241,0.18)",
+                        pointerEvents: "none",
+                        zIndex: 5,
+                      }}
+                    />
+                  )}
 
-                {/* 제외 영역 드래그 임시 미리보기 */}
-                {tempExcludeRel && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: tempExcludeRel.x,
-                      top: tempExcludeRel.y,
-                      width: tempExcludeRel.w,
-                      height: tempExcludeRel.h,
-                      border: "1px dashed rgba(239,68,68,0.8)",
-                      background: "rgba(239,68,68,0.12)",
-                      pointerEvents: "none",
-                      zIndex: 6,
-                    }}
-                  />
-                )}
-
-                {/* 진행중 오버레이 (absolute) */}
-                {busy && (
-                  <div className="absolute inset-0 z-10 bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
-                    <div className="w-[320px] rounded-xl bg-white/95 border shadow p-3">
-                      <div className="text-xs font-medium text-gray-800 mb-1">
-                        {progress.label || "스캔중 중…"}
+                  {/* 제외 영역들 */}
+                  {excludesRel.map((r) => (
+                    <div
+                      key={r.id}
+                      style={{
+                        position: "absolute",
+                        left: r.x,
+                        top: r.y,
+                        width: r.w,
+                        height: r.h,
+                        border: "1px dashed #ef4444",
+                        background: "rgba(239,68,68,0.18)",
+                        pointerEvents: "none",
+                        zIndex: 6,
+                      }}
+                    >
+                      <div style={{ position: "absolute", right: -12, top: -12, pointerEvents: "auto" }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); removeExclude(r.id); }}
+                          className="h-6 w-6 rounded-full bg-white border shadow flex items-center justify-center"
+                          title="이 제외영역 삭제"
+                        >
+                          <MinusCircle size={16} className="text-rose-600" />
+                        </button>
                       </div>
-                      <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
-                        {progress.indeterminate ? (
-                          <div className="absolute inset-0">
-                            <div className="h-full w-1/3 bg-[#a399f2] animate-[marquee_1.1s_linear_infinite] rounded-full" />
-                          </div>
-                        ) : (
-                          <div
-                            className="h-full bg-[#a399f2] transition-[width] duration-150"
-                            style={{ width: `${progress.pct ?? 0}%` }}
-                          />
-                        )}
-                      </div>
-                      <style>{`@keyframes marquee { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }`}</style>
                     </div>
-                  </div>
-                )}
+                  ))}
+
+                  {/* 제외 영역 드래그 임시 미리보기 */}
+                  {tempExcludeRel && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: tempExcludeRel.x,
+                        top: tempExcludeRel.y,
+                        width: tempExcludeRel.w,
+                        height: tempExcludeRel.h,
+                        border: "1px dashed rgba(239,68,68,0.8)",
+                        background: "rgba(239,68,68,0.12)",
+                        pointerEvents: "none",
+                        zIndex: 6,
+                      }}
+                    />
+                  )}
+
+                  {/* 진행중 오버레이 (absolute) */}
+                  {busy && (
+                    <div className="absolute inset-0 z-10 bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
+                      <div className="w-[320px] rounded-xl bg-white/95 border shadow p-3">
+                        <div className="text-xs font-medium text-gray-800 mb-1">
+                          {progress.label || "스캔중 중…"}
+                        </div>
+                        <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden relative">
+                          {progress.indeterminate ? (
+                            <div className="absolute inset-0">
+                              <div className="h-full w-1/3 bg-[#a399f2] animate-[marquee_1.1s_linear_infinite] rounded-full" />
+                            </div>
+                          ) : (
+                            <div
+                              className="h-full bg-[#a399f2] transition-[width] duration-150"
+                              style={{ width: `${progress.pct ?? 0}%` }}
+                            />
+                          )}
+                        </div>
+                        <style>{`@keyframes marquee { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }`}</style>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+
+              {/* 전처리 미리보기 섹션 */}
+              {(previewUrls.roi || previewUrls.left || previewUrls.right) && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                  <div className="border rounded-xl p-2 bg-gray-50">
+                    <div className="text-xs font-medium mb-2 text-gray-600">ROI(마스킹 적용)</div>
+                    {previewUrls.roi ? (
+                      <img src={previewUrls.roi} alt="ROI filtered" className="w-full h-auto rounded" />
+                    ) : (
+                      <div className="text-xs text-gray-400">없음</div>
+                    )}
+                  </div>
+                  <div className="border rounded-xl p-2 bg-gray-50">
+                    <div className="text-xs font-medium mb-2 text-gray-600">왼쪽 밴드(숫자) 전처리</div>
+                    {previewUrls.left ? (
+                      <img src={previewUrls.left} alt="Left band filtered" className="w-full h-auto rounded" />
+                    ) : (
+                      <div className="text-xs text-gray-400">없음</div>
+                    )}
+                  </div>
+                  <div className="border rounded-xl p-2 bg-gray-50">
+                    <div className="text-xs font-medium mb-2 text-gray-600">오른쪽 밴드(라벨/Lv) 전처리</div>
+                    {previewUrls.right ? (
+                      <img src={previewUrls.right} alt="Right band filtered" className="w-full h-auto rounded" />
+                    ) : (
+                      <div className="text-xs text-gray-400">없음</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="border rounded-xl p-4 text-sm text-gray-600 bg-gray-50 text-center">
               스크린샷을 선택한 뒤, 이미지에서 드래그로 <b>젬 리스트 영역</b>을 지정하세요.<br />
