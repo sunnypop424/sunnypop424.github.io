@@ -428,7 +428,7 @@ function useToasts() {
   const push = (msg) => {
     const id = uid();
     setToasts(t => [...t, { id, msg }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2600);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
   };
   const remove = (id) => setToasts(t => t.filter(x => x.id !== id));
   return { toasts, push, remove };
@@ -774,53 +774,65 @@ export default function LoACoreOptimizer() {
       return { ...prev, [category]: next };
     });
   };
-// 1) setGems를 useCallback으로 감싸서 참조를 안정화
-const setGems = useCallback((updater) => {
-  setGemsByCat((prev) => {
-    const base = prev[category] ?? []; // 안전하게 기본값
-    const next =
-      typeof updater === "function" ? updater(base) : updater;
-    setStale(true); // 여기서만 호출하면 handleScanned 말미의 중복 호출은 제거 가능
-    return { ...prev, [category]: next };
-  });
-}, [setGemsByCat, category, setStale]);
+  // 1) setGems를 useCallback으로 감싸서 참조를 안정화
+  const setGems = useCallback((updater) => {
+    setGemsByCat((prev) => {
+      const base = prev[category] ?? []; // 안전하게 기본값
+      const next =
+        typeof updater === "function" ? updater(base) : updater;
+      setStale(true); // 여기서만 호출하면 handleScanned 말미의 중복 호출은 제거 가능
+      return { ...prev, [category]: next };
+    });
+  }, [setGemsByCat, category, setStale]);
 
-// 2) mapScannedGemToItem도 안정화(선택이지만 권장)
-const mapScannedGemToItem = useCallback((g) => ({
-  id: uid(),
-  will: Number.isFinite(g?.will) ? g.will : null,
-  point: Number.isFinite(g?.point) ? g.point : null,
-  o1k: g?.opt1?.label ?? "atk",
-  o1v: Number.isFinite(g?.opt1?.level) ? g.opt1.level : 1,
-  o2k: g?.opt2?.label ?? "add",
-  o2v: Number.isFinite(g?.opt2?.level) ? g.opt2.level : 1,
-}), []);
+  // 2) mapScannedGemToItem도 안정화(선택이지만 권장)
+  const mapScannedGemToItem = useCallback((g) => ({
+    id: uid(),
+    will: Number.isFinite(g?.will) ? g.will : null,
+    point: Number.isFinite(g?.point) ? g.point : null,
+    o1k: g?.opt1?.label ?? "atk",
+    o1v: Number.isFinite(g?.opt1?.level) ? g.opt1.level : 1,
+    o2k: g?.opt2?.label ?? "add",
+    o2v: Number.isFinite(g?.opt2?.level) ? g.opt2.level : 1,
+  }), []);
 
-// 3) handleScanned deps에 안정화된 것들을 넣기
-const handleScanned = useCallback((payload) => {
-  setScanOpen(false);
-  console.log("[ScanFromImageModal:onScanned]", payload);
+  // 3) handleScanned deps에 안정화된 것들을 넣기
+  const handleScanned = useCallback((payload) => {
+    setScanOpen(false);
+    console.log("[ScanFromImageModal:onScanned]", payload);
 
-  const scanned = Array.isArray(payload?.gems) ? payload.gems : [];
-  if (scanned.length === 0) {
-    push("스캔 결과가 비어 있어요.");
-    return;
-  }
+    const skipped = Array.isArray(payload?.skippedGems) ? payload.skippedGems : [];
+    const scanned = Array.isArray(payload?.gems) ? payload.gems : [];
 
-  const items = scanned.map(mapScannedGemToItem);
+    // 추가할 아이템 변환
+    const items = scanned.map(mapScannedGemToItem);
 
-  setGems((prev) => {
-    const next = [...prev, ...items]; // 뒤에 추가
-    return next;
-  });
+    // 상태 반영
+    if (items.length > 0) {
+      setGems((prev) => [...prev, ...items]);
+      const lastId = items[items.length - 1]?.id;
+      if (lastId) setHighlightGemId(lastId);
+    }
 
-  const lastId = items[items.length - 1]?.id;
-  if (lastId) setHighlightGemId(lastId);
+    // ✅ 단일 토스트 구성
+    // ✅ 단일 토스트 구성
+    let msg = "";
+    if (items.length > 0) {
+      if (skipped.length > 0) {
+        msg = `오인식 된 ${skipped.join(", ")}번을 제외한 ${items.length}개의 젬을 목록에 추가하였습니다.`;
+      } else {
+        msg = `${items.length}개의 젬을 목록에 추가했습니다.`;
+      }
+    } else {
+      // 전부 스킵된 경우
+      msg = skipped.length > 0
+        ? `오인식으로 제외되어 추가된 젬이 없습니다. (제외: ${skipped.join(", ")}번)`
+        : "스캔 결과가 비어 있어요.";
+    }
 
-  push(`${items.length}개의 젬을 목록에 추가했습니다.`);
+    push(msg);
+  }, [push, setScanOpen, setHighlightGemId, setGems, mapScannedGemToItem]);
 
-  // setStale(true); // ← setGems 내부에서 이미 호출하므로 중복이면 제거 권장
-}, [push, setScanOpen, setHighlightGemId, setGems, mapScannedGemToItem]);
 
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }

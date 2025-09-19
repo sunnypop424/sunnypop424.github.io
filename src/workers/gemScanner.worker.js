@@ -426,7 +426,7 @@ async function ocrByBands(roiCanvas, lang, progress, excludes = []) {
       smooth: 0,        // 하드 클램핑(가장 쨍하게 분리)
     }
   });
-
+  // const lefttPre = await preprocessToBitmap(await createImageBitmap(rightBlob), { invert: true });
   const rightPre = await preprocessToBitmap(await createImageBitmap(rightBlob), { invert: true });
 
   const WL_NUM   = "0123456789"; // 0 포함
