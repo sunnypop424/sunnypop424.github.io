@@ -437,9 +437,8 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
                   type="button"
                   onClick={() => setMode("include")}
                   disabled={busy}
-                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${
-                    mode === "include" ? "bg-indigo-50 border-indigo-300" : "bg-white"
-                  }`}
+                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "include" ? "bg-indigo-50 border-indigo-300" : "bg-white"
+                    }`}
                   title="젬 리스트 영역 지정"
                 >
                   <BoxSelect size={16} />
@@ -449,9 +448,8 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
                   type="button"
                   onClick={() => setMode("exclude")}
                   disabled={busy}
-                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${
-                    mode === "exclude" ? "bg-rose-50 border-rose-300" : "bg-white"
-                  }`}
+                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "exclude" ? "bg-rose-50 border-rose-300" : "bg-white"
+                    }`}
                   title="제외 영역 지정"
                 >
                   <Eraser size={16} />
@@ -609,19 +607,18 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
               <div className="text-sm text-center">
                 <div className="mb-4">
                   <p>
-                    <span className="text-rose-600">1920×1080 이상의 해상도</span>
-                    로 스크린샷을 촬영하는 것을 권장합니다.
+                    <span className="text-rose-600 font-medium">1920×1080 이상 해상도</span>로 스크린샷을 촬영하는 것을 권장합니다.
                   </p>
-                  <p className="mt-1 text-xs">
-                    ※ 예시 이미지는 편의를 위해 <strong>아크그리드 창만 크롭</strong>했지만, 실제 작업에서는{" "}
-                    <strong>전체 화면 스크린샷</strong>을 사용해도 무방합니다.
-                  </p>
-                  <p className="mt-1 text-xs">
-                    ※ 작업 시에는 아래 <strong>예시 이미지</strong>를 참고하여{" "}
-                    <strong>동일한 방식으로 가이드를 그려주세요.</strong>
-                  </p>
+                  <p className="text-[11px]">예시 이미지는 설명을 위해 <strong>아크그리드 창만 크롭</strong>했지만, 실제 작업에서는 <strong>전체 화면 스크린샷</strong>을 사용해도 무방합니다.</p>
+                  <ul className="text-xs">
+                    <li>
+                      아래 <strong className="text-rose-600">예시 이미지</strong>를 참고해 <strong className="text-rose-600">동일한 방식</strong>으로 가이드를 그려주세요.
+                    </li>
+                    <li>
+                      <strong className="text-rose-600">정확도 향상</strong>을 위해, 작업 전 <strong className="text-rose-600">모든 젬을 장착 해제</strong>해 주세요.
+                    </li>
+                  </ul>
                 </div>
-
                 <figure>
                   <img
                     src="https://i.ibb.co/Qjk1QkCF/example.jpg"
