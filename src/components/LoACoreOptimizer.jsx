@@ -67,7 +67,7 @@ const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
 const TARGET_MAX_BY_GRADE = {
   HERO: 10,
   LEGEND: 14,
-  RELIC: 19,
+  RELIC: 20,
   ANCIENT: 20,
 };
 
