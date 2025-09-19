@@ -204,3 +204,28 @@ export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, en
 
   return filtered;
 }
+
+/**
+ * 여러 코어의 조합(ComboInfo[])을 한 번에 넣고
+ * 딜러의 최종 데미지 배율(곱연산)을 계산합니다.
+ * @param {ComboInfo[]} fullCombination
+ * @param {Weights} weights
+ * @returns {number}
+ */
+export function calculateDealerGlobalScore(fullCombination, weights) {
+  const W = sanitizeWeights(weights);
+  const total = { atk: 0, add: 0, boss: 0 };
+
+  for (const coreCombo of fullCombination || []) {
+    for (const gem of coreCombo.list || []) {
+      if (gem.o1k && total.hasOwnProperty(gem.o1k)) total[gem.o1k] += gem.o1v || 0;
+      if (gem.o2k && total.hasOwnProperty(gem.o2k)) total[gem.o2k] += gem.o2v || 0;
+    }
+  }
+
+  const atkPct  = levelValueByRole('dealer', 'atk',  total.atk);
+  const addPct  = levelValueByRole('dealer', 'add',  total.add);
+  const bossPct = levelValueByRole('dealer', 'boss', total.boss);
+
+  return (1 + atkPct * W.atk) * (1 + addPct * W.add) * (1 + bossPct * W.boss);
+}

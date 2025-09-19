@@ -1,6 +1,6 @@
 // src/workers/optimizer.worker.js
 /* eslint-env worker, es2020 */
-import { enumerateCoreCombos, CORE_THRESHOLDS, sanitizeWeights } from "../lib/optimizerCore.js";
+import { enumerateCoreCombos, CORE_THRESHOLDS, sanitizeWeights, calculateDealerGlobalScore } from "../lib/optimizerCore.js";
 
 const thrMax = (ci) => (ci?.thr?.length ? Math.max(...ci.thr) : 0);
 const minOf = (g) => Math.min(...CORE_THRESHOLDS[g]);
@@ -174,8 +174,20 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
 
   // 3) 탐색 로직 (백트래킹)
   const emptyPick = { list: [], totalWill: 0, totalPoint: 0, thr: [], roleSum: 0, score: 0 };
-  const betterThan = (A, B) => {
+  function betterThan(A, B, role) {
     if (!B) return true;
+    if (role === 'dealer') {
+      if (A.globalScore !== B.globalScore) return A.globalScore > B.globalScore;
+      // 동점일 때는 기존 tie-breaker 유지
+      if (A.sumThr !== B.sumThr) return A.sumThr > B.sumThr;
+      for (let i = 0; i < A.thrVec.length; i++) if (A.thrVec[i] !== B.thrVec[i]) return A.thrVec[i] > B.thrVec[i];
+      if (A.sumPoint !== B.sumPoint) return A.sumPoint > B.sumPoint;
+      for (let i = 0; i < A.ptVec.length; i++) if (A.ptVec[i] !== B.ptVec[i]) return A.ptVec[i] > B.ptVec[i];
+      if (A.roleSum !== B.roleSum) return A.roleSum > B.roleSum;
+      if (A.sumWill !== B.sumWill) return A.sumWill < B.sumWill;
+      return false;
+    }
+    // support 등은 기존 규칙
     if (A.sumThr !== B.sumThr) return A.sumThr > B.sumThr;
     for (let i = 0; i < A.thrVec.length; i++) if (A.thrVec[i] !== B.thrVec[i]) return A.thrVec[i] > B.thrVec[i];
     if (A.sumPoint !== B.sumPoint) return A.sumPoint > B.sumPoint;
@@ -183,7 +195,7 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
     if (A.roleSum !== B.roleSum) return A.roleSum > B.roleSum;
     if (A.sumWill !== B.sumWill) return A.sumWill < B.sumWill;
     return false;
-  };
+  }
 
   // 백트래킹 솔버
   function trySolve(enforceSet, blockedSet = new Set()) {
@@ -199,12 +211,18 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
           const t = thrMax(picksAcc[idx]);
           if (t < effMin) return;
         }
+        // 딜러라면 글로벌 곱연산 점수를 계산
+        const globalScore = (role === 'dealer')
+          ? calculateDealerGlobalScore(picksAcc.filter(p => p && p.list && p.list.length > 0), weights)
+          : null;
+
         const cand = {
           picks: picksAcc.map(x => x),
           sumThr: sumThrAcc, sumPoint: sumPointAcc, sumWill: sumWillAcc, roleSum: roleSumAcc,
           thrVec: thrVec.slice(), ptVec: ptVec.slice(),
+          globalScore
         };
-        if (betterThan(cand, best)) best = cand;
+        if (betterThan(cand, best, role)) best = cand;
         return;
       }
 
@@ -253,7 +271,7 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
   const enforcedSetFull = new Set(enforcedIdx);
   const bestFull = trySolve(enforcedSetFull);
   if (bestFull) {
-    return { picks: bestFull.picks };
+    return { picks: bestFull.picks, score: (role === 'dealer' ? bestFull.globalScore : undefined) };
   }
 
   // 2) 1번 실패 시, 최하위 우선순위 코어를 포기하고 재시도
@@ -265,7 +283,10 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
       const bestDropLowest = trySolve(enforcedMinusLowest, new Set([lowestIdx]));
       if (bestDropLowest) {
         const finalPicks = bestDropLowest.picks.map((p, i) => (i === lowestIdx ? emptyPick : (p || emptyPick)));
-        return { picks: finalPicks };
+        const finalScore = (role === 'dealer')
+          ? calculateDealerGlobalScore(finalPicks.filter(p => p && p.list && p.list.length > 0), weights)
+          : undefined;
+        return { picks: finalPicks, score: finalScore };
       }
     }
   }
@@ -286,15 +307,16 @@ async function solveWithAdvancedFallback({ cores, pool, role, weights, perCoreLi
   const bestReduced = trySolve(enforcedSetReduced);
 
   if (bestReduced) {
-    // 불가능했던 코어는 결과 없음 처리
     const finalPicks = bestReduced.picks.map((p, i) => (infeasibleEnforced.has(i) ? emptyPick : (p || emptyPick)));
-    return { picks: finalPicks };
+    const finalScore = (role === 'dealer')
+      ? calculateDealerGlobalScore(finalPicks.filter(p => p && p.list && p.list.length > 0), weights)
+      : undefined;
+    return { picks: finalPicks, score: finalScore };
   }
 
   // 5) 최종 안전망
   return { picks: cores.map(() => emptyPick) };
 }
-
 
 globalThis.onmessage = async (e) => {
   const { type = "run", cores, gems, role, weights, perCoreLimit } = e.data;

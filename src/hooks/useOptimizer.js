@@ -21,10 +21,12 @@ export function useOptimizer(cores, gems, role, weights, category) {
     pulse: 0,
   });
   const [priorityPicks, setPriorityPicks] = useState([]);
+  // eslint-disable-next-line
+  const [globalScore, setGlobalScore] = useState(null);
   const workerRef = useRef(null);
 
   // ✅ 새로 추가: 마지막으로 "계산하기"를 눌렀을 때의 입력값 스냅샷
-  const paramsRef = useRef({ cores, gems, role, weights });
+  const paramsRef = useRef({ cores, gems, role, weights, category });
 
   useEffect(() => {
     workerRef.current = new Worker(new URL('../workers/optimizer.worker.js', import.meta.url), { type: 'module' });
@@ -46,6 +48,7 @@ export function useOptimizer(cores, gems, role, weights, category) {
       if (cancelled) return;
       flushSync(() => {
         setComputing(true);
+        setGlobalScore(null); // 새 계산 시작 시 이전 점수 잠시 숨김
         setProgress({
           pct: 0,
           label: "최적의 젬 조합을 찾고 있습니다…",
@@ -110,8 +113,10 @@ export function useOptimizer(cores, gems, role, weights, category) {
             return;
           }
           if (msg.type === "result") {
-            const { picks } = msg;
+            const { picks, score } = msg;
             setPriorityPicks(picks || []);
+            // 필요하면 별도 상태로 보관해서 상단 배지/툴팁 등에 노출
+            setGlobalScore(score ?? null);
             setComputing(false);
             setProgress((p) => ({ ...p, pct: 100, label: "완료", indeterminate: false, pulse: undefined }));
             worker.removeEventListener('message', onMessage);
@@ -122,10 +127,9 @@ export function useOptimizer(cores, gems, role, weights, category) {
         worker.addEventListener('message', onMessage);
 
         // ✅ 스냅샷을 꺼내서 사용
-        const { cores: c, gems: gAll, role: r, weights: w, category: cat } = paramsRef.current;
-        const g = Array.isArray(gAll)
-          ? gAll.filter(x => !cat || x.category === cat) // ← 카테고리 필터
-          : [];
+        const { cores: c, gems: gAll, role: r, weights: w } = paramsRef.current;
+        // 상위에서 이미 카테고리별 배열을 넘겨주므로 추가 필터 필요 없음
+        const g = Array.isArray(gAll) ? gAll : [];
 
         // 젬 개수만으로 perCoreLimit 산정
         const perCoreLimit =
@@ -160,6 +164,7 @@ export function useOptimizer(cores, gems, role, weights, category) {
     isComputing: computing,
     progress,
     results: priorityPicks,
+    globalScore,
     calculate, // ← 이 함수가 “계산하기” 버튼 onClick에 연결되면 됩니다.
     hasCalculated,
   };

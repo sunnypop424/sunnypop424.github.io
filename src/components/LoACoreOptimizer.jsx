@@ -674,7 +674,9 @@ export default function LoACoreOptimizer() {
   const cores = coresByCat[category];
   const gems = gemsByCat[category];
 
-  const { isComputing, progress, results, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights);
+  // 글로벌 스코어 보류
+  // eslint-disable-next-line
+  const { isComputing, progress, results, globalScore, calculate, hasCalculated } = useOptimizer(cores, gems, role, weights, category);
 
   const [selectedJob, setSelectedJob] = useState(() => (loadFromStorage()?.selectedJob ?? ""));
 
