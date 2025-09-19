@@ -407,7 +407,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
       <div className="w-auto rounded-2xl bg-white border shadow-lg overflow-hidden flex flex-col max-h-[98vh] min-w-[720px]">
         {/* 헤더 */}
         <div className="flex items-center justify-between px-4 py-3 border-b flex-none">
-          <div className="font-semibold">이미지에서 젬 목록 스캔 (수동 ROI + 제외영역)</div>
+          <div className="font-semibold">이미지에서 젬 목록 스캔</div>
           <button
             className="h-8 w-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
             onClick={onClose}
