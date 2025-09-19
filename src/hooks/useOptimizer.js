@@ -123,7 +123,13 @@ export function useOptimizer(cores, gems, role, weights) {
 
         // ✅ 스냅샷을 꺼내서 사용
         const { cores: c, gems: g, role: r, weights: w } = paramsRef.current;
-        const perCoreLimit = g.length > 60 ? 400 : g.length > 45 ? 600 : g.length > 30 ? 800 : 1000;
+        const perCoreLimit =
+        g.length <= 18 ? 1200 :
+        g.length <= 24 ? 1000 :
+        g.length <= 30 ?  900 :
+        g.length <= 40 ?  800 :
+        g.length <= 50 ?  700 :
+        g.length <= 60 ?  600 : 500;
 
         worker.postMessage({ type: "run", cores: c, gems: g, role: r, weights: w, perCoreLimit });
       } catch (err) {
