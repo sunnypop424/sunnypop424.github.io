@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
-export function useOptimizer(cores, gems, role, weights) {
+export function useOptimizer(cores, gems, role, weights, category) {
   const [calcVersion, setCalcVersion] = useState(0);
   const [hasCalculated, setHasCalculated] = useState(false);
   const [computing, setComputing] = useState(false);
@@ -122,14 +122,19 @@ export function useOptimizer(cores, gems, role, weights) {
         worker.addEventListener('message', onMessage);
 
         // ✅ 스냅샷을 꺼내서 사용
-        const { cores: c, gems: g, role: r, weights: w } = paramsRef.current;
+        const { cores: c, gems: gAll, role: r, weights: w, category: cat } = paramsRef.current;
+        const g = Array.isArray(gAll)
+          ? gAll.filter(x => !cat || x.category === cat) // ← 카테고리 필터
+          : [];
+
+        // 젬 개수만으로 perCoreLimit 산정
         const perCoreLimit =
-        g.length <= 18 ? 1200 :
-        g.length <= 24 ? 1000 :
-        g.length <= 30 ?  900 :
-        g.length <= 40 ?  800 :
-        g.length <= 50 ?  700 :
-        g.length <= 60 ?  600 : 500;
+          g.length <= 18 ? 1200 :
+          g.length <= 24 ? 1000 :
+          g.length <= 30 ?  900 :
+          g.length <= 40 ?  800 :
+          g.length <= 50 ?  700 :
+          g.length <= 60 ?  600 : 500;
 
         worker.postMessage({ type: "run", cores: c, gems: g, role: r, weights: w, perCoreLimit });
       } catch (err) {
@@ -146,10 +151,10 @@ export function useOptimizer(cores, gems, role, weights) {
 
   // ✅ 변경점: 계산 버튼을 눌렀을 때 현재 입력값을 스냅샷으로 저장한 뒤 calcVersion 증가
   const calculate = useCallback(() => {
-    paramsRef.current = { cores, gems, role, weights }; // 최신값 스냅샷
+    paramsRef.current = { cores, gems, role, weights, category }; // 최신값 스냅샷
     setCalcVersion(v => v + 1);
     setHasCalculated(true);
-  }, [cores, gems, role, weights]);
+  }, [cores, gems, role, weights, category]);
 
   return {
     isComputing: computing,

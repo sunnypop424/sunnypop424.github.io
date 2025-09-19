@@ -33,6 +33,54 @@ const comboCmp = (a, b) => {
   return a.totalWill - b.totalWill;
 };
 
+// 다목적 파레토 Top-K (thrMax↑, totalPoint↑, roleSum↑, totalWill↓)
+function paretoTopK(list, k) {
+  const dom = (a, b) => {
+    const aThr = Math.max(0, ...(a.thr || []));
+    const bThr = Math.max(0, ...(b.thr || []));
+    const aVec = [aThr, a.totalPoint, a.roleSum, -a.totalWill];
+    const bVec = [bThr, b.totalPoint, b.roleSum, -b.totalWill];
+    let betterOrEqual = true, strictlyBetter = false;
+    for (let i = 0; i < aVec.length; i++) {
+      if (aVec[i] < bVec[i]) betterOrEqual = false;
+      if (aVec[i] > bVec[i]) strictlyBetter = true;
+    }
+    return betterOrEqual && strictlyBetter;
+  };
+
+  // 1) 파레토 전선
+  const front = [];
+  outer: for (const x of list) {
+    for (let i = front.length - 1; i >= 0; i--) {
+      const y = front[i];
+      if (dom(y, x)) continue outer;   // y가 x 지배 → x 탈락
+      if (dom(x, y)) front.splice(i, 1); // x가 y 지배 → y 제거
+    }
+    front.push(x);
+  }
+
+  // 2) 전선 > k면 안정적 타이브레이크로 정렬해 k 컷
+  if (front.length > k) {
+    front.sort((a, b) => {
+      const t = Math.max(0, ...(b.thr || [])) - Math.max(0, ...(a.thr || []));
+      if (t) return t;
+      if (b.totalPoint !== a.totalPoint) return b.totalPoint - a.totalPoint;
+      if (b.roleSum !== a.roleSum) return b.roleSum - a.roleSum;
+      return a.totalWill - b.totalWill;
+    });
+    return front.slice(0, k);
+  }
+
+  // 3) 전선 < k면 전선을 우선으로 채운 뒤 잔여를 comboCmp로 보충
+  if (front.length < k) {
+    const set = new Set(front);
+    const rest = list.filter(x => !set.has(x)).sort(comboCmp);
+    front.push(...rest.slice(0, k - front.length));
+  }
+  return front;
+}
+
+
 /**
 * 후보 생성: 코어별로 프레임 양보하면서 진행 브로드캐스트
 * - gen 단계는 전체 후보 조합 수를 알 수 있으니 **결정형 퍼센트(done/total)** 제공
@@ -116,13 +164,12 @@ async function buildAllCandidates({ cores, pool, role, weights, perCoreLimit, em
     }, true);
     await sleep(0);
 
-    const list = enumerateCoreCombos(
-       pool, core.grade, role, weights, core.minThreshold, core.enforceMin, onTick
-    )
-      .filter((ci) => ci.list.length > 0 && ci.thr.length > 0)
-      .sort(comboCmp)
-      .slice(0, perCoreLimit);
+    const raw = enumerateCoreCombos(
+      pool, core.grade, role, weights, core.minThreshold, core.enforceMin, onTick
+    ).filter(ci => ci.list.length > 0 && ci.thr.length > 0);
 
+    // 파레토 상위 K로 다운샘플
+    const list = paretoTopK(raw, perCoreLimit);
     candidatesPerCore[idx] = list;
 
     // 코어 종료 스냅샷(강제 1회) + 프레임 양보
