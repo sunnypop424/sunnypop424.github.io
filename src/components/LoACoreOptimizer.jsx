@@ -63,7 +63,7 @@ const JOBS = ARC_CORES?.jobs ?? [];
 const CORE_NAME_BY_GROUP = { "해": "해 코어", "달": "달 코어", "별": "별 코어" };
 const GROUP_BY_CORE_NAME = { "해 코어": "해", "달 코어": "달", "별 코어": "별" };
 
-const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
+const CORE_ORDER = ["별 코어", "달 코어", "해 코어"];
 
 const TARGET_MAX_BY_GRADE = {
   HERO: 10,
