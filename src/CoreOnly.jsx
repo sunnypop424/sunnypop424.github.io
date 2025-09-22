@@ -4,7 +4,7 @@ import React from "react";
 import { HashRouter, Routes, Route, Navigate, NavLink } from "react-router-dom";
 import LoACoreOptimizer from "./components/LoACoreOptimizer";
 import GemSimulator from "./components/GemSimulator";
-import { ChevronUp, MessageCircle, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown } from "lucide-react";
 import { showToast } from "./lib/toastBus"; // 전역 토스트 버스
 import localPatchNotes from "./data/patch.json"; // ← /src/data/patch.json 고정
 
@@ -76,24 +76,28 @@ function sortNotesDescByDate(arr) {
   });
 }
 
-/** 스크롤 하단 근처 감지 */
-function useNearBottom(offset = 520) {
-  const [near, setNear] = React.useState(false);
+function useScrollPast(threshold = window.innerHeight) {
+  const [past, setPast] = React.useState(false);
+
   React.useEffect(() => {
-    const onScroll = () => {
-      const doc = document.documentElement;
-      const scrollBottom = doc.scrollHeight - (doc.scrollTop + window.innerHeight);
-      setNear(scrollBottom <= offset);
+    let t = threshold;
+    const onResize = () => {
+      // threshold가 함수/음수 방지: 뷰포트 기반일 때만 갱신
+      if (threshold === window.innerHeight) t = window.innerHeight;
     };
+    const onScroll = () => setPast(window.scrollY >= t);
+
+    onResize();
     onScroll();
+    window.addEventListener("resize", onResize);
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
     return () => {
+      window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
     };
-  }, [offset]);
-  return near;
+  }, [threshold]);
+
+  return past;
 }
 
 /** 안전 토스트 호출 */
@@ -215,6 +219,7 @@ function InquiryModal({ open, onClose }) {
   // 항상 렌더하되, 열릴 때만 보이도록 처리 (깜빡임/지연 없음)
   return (
     <div
+      id="inquiry-modal"
       className="fixed inset-0 z-[100] flex items-center justify-center px-4 transition-opacity duration-150"
       role="dialog"
       aria-modal="true"
@@ -607,28 +612,11 @@ function PatchNotesModal({ open, onClose, notes }) {
     </div>
   );
 }
-/** FAB 스택 */
-function FabStack({ onOpenInquiry }) {
-  const nearBottom = useNearBottom(520);
+/** TOP 전용 FAB */
+function TopFab() {
+  const show = useScrollPast(300); // 혹은 600, 1.25*window.innerHeight 등
   return (
-    <div className="fixed z-50 right-4 bottom-4 sm:right-6 sm:bottom-6 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] flex flex-col gap-2">
-      {/* 문의하기 FAB */}
-      <button
-        type="button"
-        aria-label="문의하기"
-        onClick={onOpenInquiry}
-        className={[
-          "inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/90 px-4 py-3 shadow-lg backdrop-blur",
-          "text-gray-700 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/40",
-          "transition transform duration-200",
-          nearBottom ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
-        ].join(" ")}
-      >
-        <MessageCircle size={18} />
-        <span className="hidden sm:inline text-sm font-medium">문의</span>
-      </button>
-
-      {/* TOP FAB */}
+    <div className="fixed right-4 bottom-4 sm:right-6 sm:bottom-6">
       <button
         type="button"
         aria-label="맨 위로"
@@ -637,7 +625,7 @@ function FabStack({ onOpenInquiry }) {
           "inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/90 px-4 py-3 shadow-lg backdrop-blur",
           "text-gray-700 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/40",
           "transition transform duration-200",
-          nearBottom ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
+          show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
         ].join(" ")}
       >
         <ChevronUp size={18} />
@@ -726,15 +714,37 @@ export default function CoreOnly() {
                   >
                     <span className="inline-flex items-center gap-1">
                       <span>패치 노트</span>
-{hasNew && (
-  <span
-    className="inline-flex items-center rounded-full bg-[#a399f2] text-white
+                      {hasNew && (
+                        <span
+                          className="inline-flex items-center rounded-full bg-[#a399f2] text-white
                text-[9px] font-semibold leading-none px-[6px] py-1
                motion-safe:animate-[pulse_1.6s_ease-in-out_infinite]"
-  >
-    NEW
-  </span>
-)}
+                        >
+                          NEW
+                        </span>
+                      )}
+                    </span>
+                  </NavLink>
+                </li>
+                <li>
+                  {/* 라우팅 이동 없이 '문의하기' 모달 열기 */}
+                  <NavLink
+                    to="/inquiry"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInqOpen(true); }}
+                    className={() =>
+                      [
+                        "px-4 py-2 text-sm font-medium rounded-lg transition",
+                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                        "text-gray-700 hover:bg-gray-50",
+                      ].join(" ")
+                    }
+                    role="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={inqOpen}
+                    aria-controls="inquiry-modal"
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <span>문의하기</span>
                     </span>
                   </NavLink>
                 </li>
@@ -754,8 +764,7 @@ export default function CoreOnly() {
         </main>
       </div>
 
-      {/* FAB & 모달 */}
-      <FabStack onOpenInquiry={() => setInqOpen(true)} />
+      <TopFab />
       <InquiryModal open={inqOpen} onClose={() => setInqOpen(false)} />
       <PatchNotesModal open={patchOpen} onClose={() => setPatchOpen(false)} notes={notesSorted} />
     </HashRouter>
