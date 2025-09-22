@@ -117,7 +117,7 @@ async function buildAllCandidates({ cores, pool, role, weights, perCoreLimit, em
     await sleep(0);
 
     const list = enumerateCoreCombos(
-       pool, core.grade, role, weights, core.minThreshold, core.enforceMin, onTick
+       pool, core.grade, role, weights, core.minThreshold, core.enforceMin, onTick, core.supply
     )
       .filter((ci) => ci.list.length > 0 && ci.thr.length > 0)
       .sort(comboCmp)

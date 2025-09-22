@@ -5,11 +5,19 @@
 /** @typedef {"HERO"|"LEGEND"|"RELIC"|"ANCIENT"} CoreGrade */
 /** @typedef {{id:string, will:number|null, point:number|null, o1k:OptionKey, o1v:number|null, o2k:OptionKey, o2v:number|null}} Gem */
 /** @typedef {{[k in OptionKey]: number}} Weights */
-/** @typedef {{ id:string, name:string, grade:CoreGrade, minThreshold?:number, enforceMin:boolean }} CoreDef */
+/** @typedef {{ id:string, name:string, grade:CoreGrade, minThreshold?:number, enforceMin:boolean, supply?: number }} CoreDef */
 /** @typedef {{ list: Gem[], totalWill:number, totalPoint:number, thr:number[], roleSum:number, score:number }} ComboInfo */
 
 /* =============================== 상수 정의 =============================== */
+// 기본값(미선택 시 사용)
 export const CORE_SUPPLY = { HERO: 7, LEGEND: 11, RELIC: 15, ANCIENT: 17 };
+// 등급별 “선택 가능한 공급 의지력” 목록
+export const CORE_SUPPLY_OPTIONS = {
+  HERO: [7, 9],
+  LEGEND: [11, 12],
+  RELIC: [15],
+  ANCIENT: [17],
+};
 export const CORE_THRESHOLDS = {
   HERO: [10],
   LEGEND: [10, 14],
@@ -152,8 +160,10 @@ export function scoreCombo(combo, grade, role, weights) {
 }
 
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
-export function enumerateCoreCombos(pool, grade, role, weights, minThreshold, enforceMin, onStep) {
-  const supply = CORE_SUPPLY[grade];
+export function enumerateCoreCombos(
+  pool, grade, role, weights, minThreshold, enforceMin, onStep, supplyOverride
+) {
+  const supply = (supplyOverride ?? CORE_SUPPLY[grade]);
   const W = sanitizeWeights(weights);
 
   /** @type {ComboInfo[]} */

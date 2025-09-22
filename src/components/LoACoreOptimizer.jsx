@@ -30,6 +30,7 @@ import './LoACoreOptimizer.css';
 
 import {
   CORE_SUPPLY,
+  CORE_SUPPLY_OPTIONS,
   CORE_THRESHOLDS,
   CORE_LABEL,
   GRADES,
@@ -67,7 +68,7 @@ const CORE_ORDER = ["해 코어", "달 코어", "별 코어"];
 const TARGET_MAX_BY_GRADE = {
   HERO: 10,
   LEGEND: 14,
-  RELIC: 19,
+  RELIC: 20,
   ANCIENT: 20,
 };
 
@@ -940,10 +941,15 @@ export default function LoACoreOptimizer() {
   const smallFieldBase = "h-10 px-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-[#a399f2]/50 bg-white";
   const sectionTitle = "text-base font-semibold whitespace-nowrap";
   const card = "bg-white rounded-2xl shadow-sm";
-  const chip = "px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs lg:text-[13px]";
+  const chip = "px-2.5 py-1.5 rounded-xl bg-gray-100 text-xs lg:text-[13px] font-normal";
   const labelCls = "block text-xs text-gray-500 mb-1";
   const displayIndexCore = (idx) => idx + 1;
   const displayIndexGem = (idx, total) => total - idx;
+
+  const resolveSupply = (core) => {
+    const def = CORE_SUPPLY?.[core.grade];
+    return (core?.supply ?? def);
+  };
 
   useEffect(() => {
     saveToStorage({ category, coresByCat, gemsByCat, role, weights, selectedJob });
@@ -1225,7 +1231,8 @@ export default function LoACoreOptimizer() {
                 {(provided) => (
                   <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-3">
                     {cores.map((c, idx) => {
-                      const supply = CORE_SUPPLY[c.grade];
+                      const supply = resolveSupply(c);
+                      const supplyOptions = CORE_SUPPLY_OPTIONS?.[c.grade] ?? [CORE_SUPPLY[c.grade]];
                       const gradeMax = TARGET_MAX_BY_GRADE[c.grade];
                       const thresholds = (CORE_THRESHOLDS[c.grade] ?? []).filter(v => v <= gradeMax);
                       const targetItems = [{ value: '', label: '(선택 안 함)' }].concat(
@@ -1268,7 +1275,11 @@ export default function LoACoreOptimizer() {
                                       (c.minThreshold != null && c.minThreshold > maxAllowed)
                                         ? maxAllowed
                                         : c.minThreshold;
-                                    updateCore(c.id, { grade: g, minThreshold: nextMin });
+                                    // 공급 의지력 재설정(선택지에 맞춰 보정)
+                                    const opts = CORE_SUPPLY_OPTIONS?.[g] ?? [CORE_SUPPLY[g]];
+                                    const nextSupply =
+                                      (c.supply != null && opts.includes(c.supply)) ? c.supply : opts[0];
+                                    updateCore(c.id, { grade: g, minThreshold: nextMin, supply: nextSupply });
                                   }}
                                   items={GRADES.map(g => ({ value: g, label: CORE_LABEL[g] }))}
                                   placeholder="코어 등급"
@@ -1293,7 +1304,7 @@ export default function LoACoreOptimizer() {
                                           grade={c.grade}
                                           category={category}
                                           coreName={c.name}
-                                          supply={CORE_SUPPLY[c.grade]}
+                                          supply={resolveSupply(c)}
                                         />
                                       </label>
                                       <Dropdown
@@ -1309,7 +1320,22 @@ export default function LoACoreOptimizer() {
                               )}
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>공급 의지력</label>
-                                <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center"><span className="text-primary font-semibold">{supply}</span></div>
+                                {['HERO', 'LEGEND'].includes(String(c.grade)) ? (
+                                  <Dropdown
+                                    className="w-full lg:w-16"
+                                    value={String(supply)}
+                                    onChange={(val) => {
+                                      const num = Number(val);
+                                      if (Number.isFinite(num)) updateCore(c.id, { supply: num });
+                                    }}
+                                    items={supplyOptions.map(v => ({ value: String(v), label: `${v}` }))}
+                                    placeholder="공급 선택"
+                                  />
+                                ) : (
+                                  <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center lg:w-16">
+                                    <span className="text-primary font-semibold">{supply}</span>
+                                  </div>
+                                )}
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>목표 포인트</label>
@@ -1633,14 +1659,34 @@ export default function LoACoreOptimizer() {
         </div>
 
         <section className={`${card} p-4 lg:p-6`}>
-          <h2 className={sectionTitle}>결과</h2>
+          <div className="flex items-center gap-2 justify-between">
+            <h2 className={sectionTitle}>
+            결과
+            </h2>
+            
+            {(() => {
+              const hasAny = Array.isArray(results) && results.some(r => r && r.list && r.list.length > 0);
+              if (!hasAny) return null;
+              const totalRoleSum = results.reduce((acc, r) => acc + (r?.roleSum || 0), 0);
+              return (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <div className={chip}>
+                    전체 {role === 'dealer' ? "예상 딜 증가량 (젬) " : role === 'support' ? "유효 옵션 합 (젬) " : "유효 옵션 합 (젬) "}{" "}
+                    <span className="font-semibold text-primary">
+                      {totalRoleSum.toFixed(3)}{role === 'dealer' ? '%' : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
           <p className="text-xs text-gray-600 mt-2">코어 1개당 최대 <b>젬 4개</b>까지 장착할 수 있습니다.</p>
           {!isComputing && stale && hasCalculated && (
             <p className="text-xs text-red-700 mt-1">입력값이 변경되었습니다. 우측 상단의 <b>계산하기</b> 버튼을 눌러 다시 계산해 주세요.</p>
           )}
           <div className="space-y-4 mt-2">
             {cores.map((c, i) => {
-              const supply = CORE_SUPPLY[c.grade];
+              const supply = resolveSupply(c);
               const pick = results?.[i];
               const hasResult = !!(pick && pick.list && pick.list.length > 0);
               const minOfGrade = Math.min(...CORE_THRESHOLDS[c.grade]);
