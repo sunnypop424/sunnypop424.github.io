@@ -834,6 +834,34 @@ export default function LoACoreOptimizer() {
     push(msg);
   }, [push, setScanOpen, setHighlightGemId, setGems, mapScannedGemToItem]);
 
+  // 정렬 상태: 기본은 의지력 내림, 포인트 오름
+const [sortOrder, setSortOrder] = useState({ will: "desc", point: "asc" });
+const isNum = (v) => Number.isFinite(v);
+
+// 현재 sortOrder에 따라 젬 정렬 적용 (안정 정렬)
+const applyGemSort = useCallback(() => {
+  setGems((prev) => {
+    const withIdx = prev.map((g, i) => ({ g, i }));
+    withIdx.sort((A, B) => {
+      const awv = isNum(A.g.will), bwv = isNum(B.g.will);
+      if (awv !== bwv) return bwv - awv; // 값 있는 게 먼저
+      if (awv && A.g.will !== B.g.will) {
+        return sortOrder.will === "desc" ? B.g.will - A.g.will : A.g.will - B.g.will;
+      }
+      const apv = isNum(A.g.point), bpv = isNum(B.g.point);
+      if (apv !== bpv) return bpv - apv; // 값 있는 게 먼저
+      if (apv && A.g.point !== B.g.point) {
+        return sortOrder.point === "asc" ? A.g.point - B.g.point : B.g.point - A.g.point;
+      }
+      return A.i - B.i; // 안정 정렬(원래 순서 유지)
+    });
+    return withIdx.map(({ g }) => g);
+  });
+}, [setGems, sortOrder.will, sortOrder.point]);
+
+// (옵션) 드롭다운이 바뀔 때마다 자동 재정렬하고 싶으면 추가
+useEffect(() => { applyGemSort(); }, [applyGemSort]);
+
 
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return; }
@@ -1424,6 +1452,37 @@ export default function LoACoreOptimizer() {
               />
             </div>
           )}
+          <div className="flex gap-2 ml-auto whitespace-nowrap mb-3">
+                        {/* 정렬 컨트롤: 의지력/포인트 오름·내림 토글 */}
+              <Dropdown
+                className="w-32"
+                value={sortOrder.will}
+                onChange={(val) => setSortOrder((s) => ({ ...s, will: val }))}
+                items={[
+                  { value: "desc", label: "의지력 ↓" },
+                  { value: "asc",  label: "의지력 ↑" },
+                ]}
+                placeholder="의지력 정렬"
+              />
+              <Dropdown
+                className="w-32"
+                value={sortOrder.point}
+                onChange={(val) => setSortOrder((s) => ({ ...s, point: val }))}
+                items={[
+                  { value: "asc",  label: "포인트 ↑" },
+                  { value: "desc", label: "포인트 ↓" },
+                ]}
+                placeholder="포인트 정렬"
+              />
+              <button
+                className="h-10 w-auto px-3 rounded-xl border inline-flex items-center justify-center gap-2 bg-white hover:bg-white/90"
+                onClick={applyGemSort}
+                title="재정렬 (의지력 우선 → 포인트)"
+                aria-label="재정렬"
+              >
+              <span className="text-sm">재정렬</span>
+            </button>
+            </div>
           <div className="flex flex-col gap-3">
             {gems.map((g, idx) => (
               <div key={g.id} className={`relative flex flex-col lg:flex-row lg:flex-nowrap gap-2 lg:gap-3 items-stretch lg:items-center border rounded-xl p-3 overflow-visible min-w-0 bg-white ${g.id === highlightGemId ? 'LoA-highlight' : ''}`}>
