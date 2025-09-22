@@ -18,6 +18,7 @@ export const CORE_SUPPLY_OPTIONS = {
   RELIC: [15],
   ANCIENT: [17],
 };
+export const CORE_POINT_CAP = { HERO: 10, LEGEND: 14, RELIC: 20, ANCIENT: 20 };
 export const CORE_THRESHOLDS = {
   HERO: [10],
   LEGEND: [10, 14],
@@ -164,6 +165,7 @@ export function enumerateCoreCombos(
   pool, grade, role, weights, minThreshold, enforceMin, onStep, supplyOverride
 ) {
   const supply = (supplyOverride ?? CORE_SUPPLY[grade]);
+  const pointCap = (CORE_POINT_CAP?.[grade] ?? Infinity);
   const W = sanitizeWeights(weights);
 
   /** @type {ComboInfo[]} */
@@ -180,6 +182,8 @@ export function enumerateCoreCombos(
       const totalWill = combo.reduce((s, g) => s + (g.will || 0), 0);
       if (totalWill > supply) continue;
       const { totalPoint, thr, roleSum, score } = scoreCombo(combo, grade, role, W);
+      // ✅ 등급별 최대 포인트 초과 조합은 제외 (예: 전설은 14P 초과 금지)
+      if (totalPoint > pointCap) continue;
       all.push({ list: combo, totalWill, totalPoint, thr, roleSum, score });
     }
   }
