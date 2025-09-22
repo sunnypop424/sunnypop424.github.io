@@ -1,9 +1,10 @@
 // src/components/ScanFromImageModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X, ScanLine, Eraser, BoxSelect, Trash2, MinusCircle, ImageUp } from "lucide-react";
+import { X, ScanLine, Eraser, BoxSelect, Trash2, MinusCircle, ImageUp, ClipboardPaste } from "lucide-react";
 // parseFromRaw는 당김 현상을 유발하므로 사용하지 않음
 // import parseFromRaw from "../lib/ocrRescueFromRaw";
+import { showToast } from "../lib/toastBus";
 
 /* -----------------------------------------------------------
  *  내부 옵션 키 매핑 (한글 라벨 → 내부키)
@@ -19,9 +20,6 @@ const LABEL2KEY = {
 
 /* -----------------------------------------------------------
  *  왼쪽/오른쪽을 "당기지 않는" 락스텝 파서
- *  - left[i]와 right[i]를 같은 인덱스로만 묶음
- *  - 왼쪽 숫자(Will)가 오인식이면 그대로 NaN이 되도록 두고,
- *    pair 단계에서 그 젬(2줄)을 스킵
  * ----------------------------------------------------------- */
 function parseNoShift(rawLeft = "", rawRight = "") {
   const norm = (s) =>
@@ -31,13 +29,9 @@ function parseNoShift(rawLeft = "", rawRight = "") {
       .map((v) => v.trim())
       .filter(Boolean);
 
-  // 왼쪽(숫자열) 라인들
   const L = norm(rawLeft);
-
-  // 오른쪽(라벨+레벨) 라인들
   const R = norm(rawRight);
 
-  // 허용 라벨 키워드(우선순위 순)
   const LABELS = [
     "아군 공격 강화",
     "아군 피해 강화",
@@ -49,12 +43,10 @@ function parseNoShift(rawLeft = "", rawRight = "") {
 
   const clean = (t) =>
     String(t ?? "")
-      // 한글/영문/숫자/공백/점만 남기고 나머지는 공백
       .replace(/[^\u3131-\uD79D0-9A-Za-z.\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
-  // ✅ 라벨 줄에서 "가장 마지막에 나오는 숫자"를 레벨로 사용
   function parseRight(text) {
     const raw = text ?? "";
     const t = clean(raw);
@@ -68,9 +60,9 @@ function parseNoShift(rawLeft = "", rawRight = "") {
     }
 
     let level = NaN;
-    const nums = t.match(/\d+/g); // 모든 숫자 찾기
+    const nums = t.match(/\d+/g);
     if (nums && nums.length) {
-      level = parseInt(nums[nums.length - 1], 10); // 마지막 숫자
+      level = parseInt(nums[nums.length - 1], 10);
     }
     return { labelKey, level, rawRight: raw };
   }
@@ -78,12 +70,12 @@ function parseNoShift(rawLeft = "", rawRight = "") {
   const rows = [];
   const N = Math.max(L.length, R.length);
   for (let i = 0; i < N; i++) {
-    const leftStr = L[i] ?? ""; // 없으면 빈 문자열(→ NaN)
+    const leftStr = L[i] ?? "";
     const rightStr = R[i] ?? "";
 
     const right = parseRight(rightStr);
     rows.push({
-      will: leftStr, // 숫자 변환은 나중에
+      will: leftStr,
       labelKey: right.labelKey,
       level: right.level,
       rawLeft: leftStr,
@@ -94,10 +86,7 @@ function parseNoShift(rawLeft = "", rawRight = "") {
   return rows;
 }
 
-/** 2줄(홀수/짝수)을 1개 젬으로 묶되, 오인식 시 해당 젬은 스킵
- *  - opt1/opt2.label은 내부키로 변환
- *  - 레벨은 1~5로 클램프
- */
+/** 2줄(홀수/짝수)을 1개 젬으로 묶되, 오인식 시 해당 젬은 스킵 */
 function pairParsedToGems(list = []) {
   const gems = [];
   const skipped = []; // 제외된 젬의 1-based 인덱스
@@ -106,7 +95,6 @@ function pairParsedToGems(list = []) {
     if (typeof v === "number" && Number.isFinite(v)) return v;
     const s = String(v ?? "")
       .trim()
-      // 흔한 OCR 혼동 문자 보정
       .replace(/[|Il]/g, "1")
       .replace(/[Oo]/g, "0")
       .replace(/[sS]/g, "5")
@@ -122,14 +110,13 @@ function pairParsedToGems(list = []) {
   };
 
   for (let i = 0, gemIdx = 1; i < list.length; i += 2, gemIdx++) {
-    const a = list[i];       // 홀수번째(0-based): will + 옵션1
-    const b = list[i + 1];   // 짝수번째: will = point, 옵션2
+    const a = list[i];
+    const b = list[i + 1];
     if (!a || !b) break;
 
     const will = toNum(a.will);
     const point = toNum(b.will);
 
-    // 숫자 인식 실패 → 이 젬은 제외(땡기지 않음)
     if (!Number.isFinite(will) || !Number.isFinite(point)) {
       skipped.push(gemIdx);
       continue;
@@ -245,7 +232,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
         setBusy(false);
         setProgress({ label: "", pct: 0, indeterminate: true });
         console.error("[gem-scanner:error]", payload?.message ?? payload, payload);
-        alert("이미지 스캔 중 오류가 발생했어요. 콘솔을 확인해 주세요.");
+        showToast("이미지 스캔 중 오류가 발생했어요. 콘솔을 확인해 주세요.", "error");
       }
     };
     worker.addEventListener("message", onMessage);
@@ -272,13 +259,45 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
 
   const pickFile = () => inputRef.current?.click();
 
-  // 전체 선택 초기화
-  const resetSelections = () => {
+  // 전체 선택 초기화 (안정 레퍼런스)
+  const resetSelections = React.useCallback(() => {
     setRectRel(null);
     setExcludesRel([]);
     setTempExcludeRel(null);
     setDrag(null);
-  };
+  }, []);
+
+
+  
+  // 버튼으로 클립보드에서 이미지 읽기 (HTTPS + 사용자 제스처 필요)
+  const pasteFromClipboard = React.useCallback(async () => {
+    try {
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          for (const type of item.types) {
+            if (type.startsWith("image/")) {
+              const blob = await item.getType(type);
+              const file = new File([blob], `pasted-${Date.now()}.png`, { type: blob.type || "image/png" });
+              resetSelections();
+              setFile(file);
+              setMode("include");
+              return;
+            }
+          }
+        }
+        showToast("클립보드에 이미지가 없습니다. 먼저 화면을 캡처하세요.", "warning");
+      } else {
+        // Safari 등 일부 브라우저는 read 미지원
+        showToast("브라우저가 이미지 붙여넣기 API를 지원하지 않습니다. 대신 Ctrl+V로 시도해 보세요.", "info");
+      }
+    } catch (err) {
+      console.error("[pasteFromClipboard]", err);
+      showToast("클립보드에서 이미지를 가져오지 못했습니다. 브라우저 권한/HTTPS 여부를 확인해 주세요.", "error");
+    }
+  }, [resetSelections]);
+
+
 
   // 래퍼 기준 좌표 가져오기
   const getRelPoint = (e) => {
@@ -361,19 +380,47 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
 
   const removeExclude = (id) => setExcludesRel((prev) => prev.filter((r) => r.id !== id));
 
+  // 전역 붙여넣기 — 버튼 UX와 동일하게 동작
+  useEffect(() => {
+    if (!open) return;
+    const onPaste = async (e) => {
+      const dt = e.clipboardData;
+      if (!dt) return;
+
+      // 1) 이미지 우선 탐색
+      const items = dt.items || [];
+      for (const it of items) {
+        if (it.type?.startsWith("image/")) {
+          const f = it.getAsFile?.();
+          if (f) {
+            e.preventDefault(); // 텍스트가 어딘가에 붙는 것 방지
+            resetSelections();
+            setFile(f);
+            setMode("include"); // 버튼 UX와 동일: 모드 초기화
+            return;
+          }
+        }
+      }
+      showToast("클립보드에 이미지가 없습니다. 먼저 화면을 캡처하세요.", "warning");
+    };
+    window.addEventListener("paste", onPaste, { capture: true });
+    return () => window.removeEventListener("paste", onPaste, { capture: true });
+  }, [open, resetSelections]);
+  // 전역 붙여넣기
+
   // OCR 실행
   const runManual = () => {
     if (!file) {
-      alert("먼저 스크린샷을 선택해 주세요.");
+      showToast("먼저 스크린샷을 선택하거나 붙여넣기(Ctrl+V) 해 주세요.", "warning");
       return;
     }
     if (!rectRel) {
-      alert("이미지 위에서 드래그로 포함 영역을 지정해 주세요.");
+      showToast("이미지 위에서 드래그로 포함 영역을 지정해 주세요.", "info");
       return;
     }
     const rect = rectRelToNatural(rectRel);
     if (!rect) {
-      alert("좌표 변환에 실패했습니다.");
+      showToast("좌표 변환에 실패했습니다.", "error");
       return;
     }
 
@@ -381,6 +428,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
 
     setBusy(true);
     setProgress({ label: "스캔중...", pct: 0, indeterminate: true });
+    setMode("include"); // 스캔 버튼 클릭 후 드래그 모드를 기본값으로 초기화
 
     file.arrayBuffer().then((buf) => {
       worker.postMessage(
@@ -389,7 +437,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
           payload: {
             buf,
             mime: file.type || "image/png",
-            lang: "kor+eng", // 필요시 "kor"로 변경
+            lang: "kor+eng",
             rect,
             excludes,
           },
@@ -430,15 +478,24 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
                 <ImageUp size={18} />
                 <span>{file ? "다른 이미지 선택" : "스크린샷 선택"}</span>
               </button>
-
+              
+                <span className="text-xs text-gray-600">또는</span>
+              <button
+                className="h-10 px-3 rounded-xl border bg-white hover:bg-white/90 inline-flex items-center gap-2"
+                onClick={pasteFromClipboard}
+                disabled={busy}
+                title="Ctrl+V 로도 붙여넣기 가능"
+              >
+                <ClipboardPaste size={18} />
+                <span>클립보드 붙여넣기</span>
+              </button>
               <div className="flex items-center gap-2 ml-2">
                 <span className="text-xs text-gray-600">드래그 모드</span>
                 <button
                   type="button"
                   onClick={() => setMode("include")}
                   disabled={busy}
-                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "include" ? "bg-indigo-50 border-indigo-300" : "bg-white"
-                    }`}
+                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "include" ? "bg-indigo-50 border-indigo-300" : "bg-white"}`}
                   title="젬 리스트 영역 지정"
                 >
                   <BoxSelect size={16} />
@@ -448,8 +505,7 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
                   type="button"
                   onClick={() => setMode("exclude")}
                   disabled={busy}
-                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "exclude" ? "bg-rose-50 border-rose-300" : "bg-white"
-                    }`}
+                  className={`h-10 px-3 rounded-xl border inline-flex items-center gap-2 ${mode === "exclude" ? "bg-rose-50 border-rose-300" : "bg-white"}`}
                   title="제외 영역 지정"
                 >
                   <Eraser size={16} />
@@ -486,7 +542,11 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setFile(f);
+                if (f) setMode("include"); // ⬅️ 선택 시 드래그 모드 초기화
+              }}
             />
           </div>
 
@@ -607,9 +667,11 @@ export default function ScanFromImageModal({ open, onClose, onScanned }) {
               <div className="text-sm text-center">
                 <div className="mb-4">
                   <p>
-                    <span className="text-rose-600 font-medium">1920×1080 이상 해상도</span>로 스크린샷을 촬영하는 것을 권장합니다.
+                    <span className="text-rose-600 font-medium">1920×1080 이상 2560 x 1440 이하 해상도 </span>로 스크린샷을 촬영하는 것을 권장합니다.
                   </p>
-                  <p className="text-[11px]">예시 이미지는 설명을 위해 <strong>아크그리드 창만 크롭</strong>했지만, 실제 작업에서는 <strong>전체 화면 스크린샷</strong>을 사용해도 무방합니다.</p>
+                  <p className="text-[11px]">
+                    예시 이미지는 설명을 위해 <strong>아크그리드 창만 크롭</strong>했지만, 실제 작업에서는 <strong>전체 화면 스크린샷</strong>을 사용해도 무방합니다.
+                  </p>
                   <ul className="text-xs">
                     <li>
                       아래 <strong className="text-rose-600">예시 이미지</strong>를 참고해 <strong className="text-rose-600">동일한 방식</strong>으로 가이드를 그려주세요.

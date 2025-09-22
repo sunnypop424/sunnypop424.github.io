@@ -426,27 +426,66 @@ function Dropdown({ value, items, onChange, placeholder, className, bordered = t
 
 function useToasts() {
   const [toasts, setToasts] = useState([]);
-  const push = (msg) => {
+  const push = (msg, type = "info") => {
     const id = uid();
-    setToasts(t => [...t, { id, msg }]);
+    setToasts(t => [...t, { id, msg, type }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000);
   };
   const remove = (id) => setToasts(t => t.filter(x => x.id !== id));
+  // 전역 토스트 이벤트 수신 (어디서든 showToast 호출 가능)
+  useEffect(() => {
+    const onEvt = (e) => {
+      const { msg, type } = e.detail || {};
+      if (!msg) return;
+      push(String(msg), type || "info");
+    };
+    window.addEventListener("app:toast", onEvt);
+    return () => window.removeEventListener("app:toast", onEvt);
+  }, []);
   return { toasts, push, remove };
 }
 
 function ToastStack({ toasts, onClose }) {
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none px-4">
+  const clsByType = (type) => {
+    switch (type) {
+      case "success": return { wrap: "bg-emerald-50/95 border-emerald-200 text-emerald-900", btn: "text-emerald-900/80 hover:text-emerald-900" };
+      case "warning": return { wrap: "bg-amber-50/95 border-amber-200 text-amber-900", btn: "text-amber-900/80 hover:text-amber-900" };
+      case "error":   return { wrap: "bg-rose-50/95 border-rose-200 text-rose-900",   btn: "text-rose-900/80 hover:text-rose-900" };
+      default:        return { wrap: "bg-indigo-50/95 border-indigo-200 text-indigo-900", btn: "text-indigo-900/80 hover:text-indigo-900" };
+    }
+  };
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[2147483647] flex items-center justify-center pointer-events-none px-4"
+      aria-live="polite"
+      role="status"
+>
       <AnimatePresence>
-        {toasts.map(t => (
-          <motion.div key={t.id} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ type: 'spring', stiffness: 380, damping: 28 }} className="pointer-events-auto overflow-hidden rounded-2xl border shadow-lg bg-amber-50/95 border-amber-200 text-amber-900 backdrop-blur px-4 py-3 flex items-center gap-3 min-w-[320px] max-w-[90vw]">
-            <div className="text-sm flex-1">{t.msg}</div>
-            <button className="text-sm font-medium text-amber-900/80 hover:text-amber-900 self-center" onClick={() => onClose(t.id)} aria-label="닫기">닫기</button>
-          </motion.div>
-        ))}
+        {toasts.map(t => {
+          const v = clsByType(t.type);
+          return (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+              className={`pointer-events-auto overflow-hidden rounded-2xl border shadow-lg backdrop-blur px-4 py-3 flex items-center gap-3 min-w-[320px] max-w-[90vw] ${v.wrap}`}
+            >
+              <div className="text-sm flex-1">{t.msg}</div>
+              <button
+                className={`text-sm font-medium self-center ${v.btn}`}
+                onClick={() => onClose(t.id)}
+                aria-label="닫기"
+              >
+                닫기
+              </button>
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -714,10 +753,10 @@ export default function LoACoreOptimizer() {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      push("JSON 파일로 내보냈습니다.");
+      push("JSON 파일로 내보냈습니다.", "success");
     } catch (e) {
       console.error(e);
-      push("내보내기 중 오류가 발생했어요.");
+      push("내보내기 중 오류가 발생했어요.", "error");
     }
   }, [buildSnapshot, push, selectedJob]);
 
@@ -752,13 +791,13 @@ export default function LoACoreOptimizer() {
           setStale(true);
         });
         setDataVersion(v => v + 1);
-        push("JSON 데이터를 불러왔습니다.");
+        push("JSON 데이터를 불러왔습니다.", "success");
       } catch (err) {
         console.error(err);
-        push("가져오기 실패: JSON 형식이 올바르지 않아요.");
+        push("가져오기 실패: JSON 형식이 올바르지 않아요.", "error");
       }
     };
-    reader.onerror = () => push("가져오기 실패: 파일을 읽을 수 없어요.");
+    reader.onerror = () => push("가져오기 실패: 파일을 읽을 수 없어요.", "error");
     reader.readAsText(file);
   }, [push, setCoresByCat, setGemsByCat, setCategory, setRole, setWeights, setSelectedJob]);
 
@@ -818,20 +857,27 @@ export default function LoACoreOptimizer() {
     // ✅ 단일 토스트 구성
     // ✅ 단일 토스트 구성
     let msg = "";
+    let type = "info";
     if (items.length > 0) {
       if (skipped.length > 0) {
-        msg = `오인식 된 ${skipped.join(", ")}번을 제외한 ${items.length}개의 젬을 목록에 추가하였습니다.`;
+        msg = `오인식 된 ${skipped.join(", ")}번을 제외한 ${items.length}개의 젬을 목록에 추가했습니다.`;
+        type = "success";
       } else {
         msg = `${items.length}개의 젬을 목록에 추가했습니다.`;
+        type = "success";
       }
     } else {
       // 전부 스킵된 경우
-      msg = skipped.length > 0
-        ? `오인식으로 제외되어 추가된 젬이 없습니다. (제외: ${skipped.join(", ")}번)`
-        : "스캔 결과가 비어 있어요.";
+      if (skipped.length > 0) {
+        msg = `오인식으로 제외되어 추가된 젬이 없습니다. (제외: ${skipped.join(", ")}번)`;
+        type = "warning";
+      } else {
+        msg = "스캔 결과가 비어 있어요.";
+        type = "info";
+      }
     }
 
-    push(msg);
+    push(msg, type);
   }, [push, setScanOpen, setHighlightGemId, setGems, mapScannedGemToItem]);
 
   // 정렬 상태: 기본은 의지력 내림, 포인트 오름
@@ -918,10 +964,10 @@ useEffect(() => { applyGemSort(); }, [applyGemSort]);
   };
   const updateGem = (id, patch) => setGems(v => v.map(g => g.id === id ? { ...g, ...patch } : g));
   const addCore = () => setCores(cs => {
-    if (cs.length >= 3) { push("코어는 최대 3개까지 추가할 수 있어요."); return cs; }
+    if (cs.length >= 3) { push("코어는 최대 3개까지 추가할 수 있어요.", "warning"); return cs; }
     const existing = new Set(cs.map(c => c.name));
     const nextName = nextAvailableCoreName(existing);
-    if (!nextName) { push("해/달/별 코어가 모두 추가되어 있어요."); return cs; }
+    if (!nextName) { push("해/달/별 코어가 모두 추가되어 있어요.", "info"); return cs; }
     const id = uid();
     setHighlightCoreId(id);
 
