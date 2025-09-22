@@ -664,95 +664,124 @@ export default function CoreOnly() {
   return (
     <HashRouter basename="/core">
       <div className="min-h-screen bg-gray-50 text-gray-900">
-        <header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-3">
-            <nav aria-label="Core pages">
-              <ul className="mx-auto flex w-full flex-wrap justify-center gap-1 rounded-xl">
-                <li>
-                  <NavLink
-                    to="/gem"
-                    className={({ isActive }) =>
-                      [
-                        "px-4 py-2 text-sm font-medium rounded-lg transition",
-                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                        isActive ? "bg-[#a399f2]/10 text-[#5b54c6]" : "text-gray-700 hover:bg-gray-50",
-                      ].join(" ")
-                    }
-                  >
-                    젬 가공 헬퍼
-                  </NavLink>
-                </li>
-                <li>
-                  <NavLink
-                    to="/optimizer"
-                    className={({ isActive }) =>
-                      [
-                        "px-4 py-2 text-sm font-medium rounded-lg transition",
-                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                        isActive ? "bg-[#a399f2]/10 text-[#5b54c6]" : "text-gray-700 hover:bg-gray-50",
-                      ].join(" ")
-                    }
-                  >
-                    젬 장착 헬퍼
-                  </NavLink>
-                </li>
-                <li>
-                  {/* 라우팅 이동 없이 모달만 열기 */}
-                  <NavLink
-                    to="/patch"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); openPatch(); }}
-                    className={() =>
-                      [
-                        "px-4 py-2 text-sm font-medium rounded-lg transition",
-                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                        "text-gray-700 hover:bg-gray-50",
-                      ].join(" ")
-                    }
-                    role="button"
-                    aria-haspopup="dialog"
-                    aria-expanded={patchOpen}
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      <span>패치 노트</span>
-                      {hasNew && (
-                        <span
-                          className="inline-flex items-center rounded-full bg-[#a399f2] text-white
-               text-[9px] font-semibold leading-none px-[6px] py-1
-               motion-safe:animate-[pulse_1.6s_ease-in-out_infinite]"
-                        >
-                          NEW
-                        </span>
-                      )}
-                    </span>
-                  </NavLink>
-                </li>
-                <li>
-                  {/* 라우팅 이동 없이 '문의하기' 모달 열기 */}
-                  <NavLink
-                    to="/inquiry"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInqOpen(true); }}
-                    className={() =>
-                      [
-                        "px-4 py-2 text-sm font-medium rounded-lg transition",
-                        "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
-                        "text-gray-700 hover:bg-gray-50",
-                      ].join(" ")
-                    }
-                    role="button"
-                    aria-haspopup="dialog"
-                    aria-expanded={inqOpen}
-                    aria-controls="inquiry-modal"
-                  >
-                    <span className="inline-flex items-center gap-1">
-                      <span>문의하기</span>
-                    </span>
-                  </NavLink>
-                </li>
-              </ul>
-            </nav>
-          </div>
-        </header>
+<header className="sticky top-0 z-40 border-b border-gray-200/60 bg-white/70 backdrop-blur">
+  <div className="mx-auto max-w-6xl px-3 sm:px-6 py-2 sm:py-3">
+    <nav aria-label="Core pages">
+      <ul
+        className={[
+          "mx-auto w-full rounded-xl",
+          // 기본: 가운데 정렬된 가로 탭
+          "flex flex-wrap justify-center gap-1",
+          // 모바일(≤480px): 2x2 그리드 전환 + 여백 축소
+          "max-[480px]:grid max-[480px]:grid-cols-2 max-[480px]:gap-1.5",
+        ].join(" ")}
+      >
+        <li>
+          <NavLink
+            to="/gem"
+            className={({ isActive }) =>
+              [
+                // 모바일 여백 축소: px-2.5 / h-9, 데스크톱은 기존 크기
+                "px-1.5 h-7 inline-flex items-center justify-center text-sm font-medium rounded-lg transition",
+                "sm:px-4 sm:h-auto sm:py-2",
+                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                isActive
+                  ? "bg-[#a399f2]/10 text-[#5b54c6]"
+                  : "text-gray-700 hover:bg-gray-50",
+                // 모바일 셀 가득 채우기
+                "max-[480px]:w-full",
+              ].join(" ")
+            }
+          >
+            젬 가공 헬퍼
+          </NavLink>
+        </li>
 
+        <li>
+          <NavLink
+            to="/optimizer"
+            className={({ isActive }) =>
+              [
+                "px-1.5 h-7 inline-flex items-center justify-center text-sm font-medium rounded-lg transition",
+                "sm:px-4 sm:h-auto sm:py-2",
+                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                isActive
+                  ? "bg-[#a399f2]/10 text-[#5b54c6]"
+                  : "text-gray-700 hover:bg-gray-50",
+                "max-[480px]:w-full",
+              ].join(" ")
+            }
+          >
+            젬 장착 헬퍼
+          </NavLink>
+        </li>
+
+        <li>
+          {/* 라우팅 이동 없이 모달만 열기 */}
+          <NavLink
+            to="/patch"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openPatch();
+            }}
+            className={() =>
+              [
+                "px-1.5 h-7 inline-flex items-center justify-center text-sm font-medium rounded-lg transition",
+                "sm:px-4 sm:h-auto sm:py-2",
+                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                "text-gray-700 hover:bg-gray-50",
+                "max-[480px]:w-full",
+              ].join(" ")
+            }
+            aria-haspopup="dialog"
+            aria-expanded={patchOpen}
+          >
+            <span className="inline-flex items-center gap-1">
+              <span>패치 노트</span>
+              {hasNew && (
+                <span
+                  className="inline-flex items-center rounded-full bg-[#a399f2] text-white
+                  text-[9px] font-semibold leading-none px-[6px] py-1 motion-safe:animate-[pulse_1.6s_ease-in-out_infinite]"
+                >
+                  NEW
+                </span>
+              )}
+            </span>
+          </NavLink>
+        </li>
+
+        <li>
+          {/* 라우팅 이동 없이 '문의하기' 모달 열기 */}
+          <NavLink
+            to="/inquiry"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setInqOpen(true);
+            }}
+            className={() =>
+              [
+                "px-1.5 h-7 inline-flex items-center justify-center text-sm font-medium rounded-lg transition",
+                "sm:px-4 sm:h-auto sm:py-2",
+                "outline-none focus-visible:ring-2 focus-visible:ring-[#a399f2]/30",
+                "text-gray-700 hover:bg-gray-50",
+                "max-[480px]:w-full",
+              ].join(" ")
+            }
+            aria-haspopup="dialog"
+            aria-expanded={false}
+            aria-controls="inquiry-modal"
+          >
+            <span className="inline-flex items-center gap-1">
+              <span>문의하기</span>
+            </span>
+          </NavLink>
+        </li>
+      </ul>
+    </nav>
+  </div>
+</header>
         {/* 라우트 영역 */}
         <main>
           <Routes>
