@@ -18,7 +18,7 @@ export const CORE_SUPPLY_OPTIONS = {
   RELIC: [15],
   ANCIENT: [17],
 };
-export const CORE_POINT_CAP = { HERO: 10, LEGEND: 14, RELIC: 20, ANCIENT: 20 };
+export const CORE_POINT_CAP = { HERO: 13, LEGEND: 16, RELIC: 20, ANCIENT: 20 };
 export const CORE_THRESHOLDS = {
   HERO: [10],
   LEGEND: [10, 14],
@@ -160,6 +160,28 @@ export function scoreCombo(combo, grade, role, weights) {
   return { totalWill, totalPoint, thr, roleSum, score };
 }
 
+// --- helpers for fallback by TOTAL POINT ---
+const thrMaxOf = (ci) => (ci?.thr?.length ? Math.max(...ci.thr) : -Infinity);
+
+/**
+ * 선택한 포인트 p(예: 14)로 정확히 맞는 조합이 없으면
+ * 총 포인트를 p+1, p+2 … 식으로 올려가며 첫 매칭 세트를 반환.
+ * (임계치 드롭다운은 건드리지 않음)
+ */
+function pickByPointExactThenUp(all, grade, startPoint) {
+  const maxP = CORE_POINT_CAP?.[grade] ?? startPoint;
+  for (let p = startPoint; p <= maxP; p += 1) {
+    const hits = all.filter(ci =>
+      ci?.list?.length > 0 &&
+      Number.isFinite(ci?.totalPoint) &&
+      ci.totalPoint === p
+    );
+    if (hits.length) return hits;
+  }
+  return [];
+}
+
+
 /* 단일 코어 후보 산출 (통일 정책: 달성 구간이 없으면 결과 없음) */
 export function enumerateCoreCombos(
   pool, grade, role, weights, minThreshold, enforceMin, onStep, supplyOverride
@@ -192,23 +214,23 @@ export function enumerateCoreCombos(
 
   // UI 정책에 맞춘 필터링
   let filtered;
-
   if (enforceMin) {
-    // '이상 탐색' 모드 (체크박스 ON)
-    const minOfGrade = Math.min(...CORE_THRESHOLDS[grade]);
-    const effMin = minThreshold ?? minOfGrade; // 목표가 없으면 등급 최소치
+    // 강제(ON): '선택 임계치 이상(≥)'인 조합 허용
+    const need = Number.isFinite(minThreshold) ? minThreshold : -Infinity;
     filtered = all.filter(ci =>
-      ci.totalPoint >= effMin && ci.thr.length > 0 && ci.list.length > 0
+      ci.list?.length > 0 &&
+      ci.thr?.length > 0 &&
+      thrMaxOf(ci) >= need
     );
   } else {
-    // '정확히 일치' 모드 (체크박스 OFF, 기본)
-    if (minThreshold != null) {
-      filtered = all.filter(ci =>
-        ci.totalPoint === minThreshold && ci.list.length > 0
-      );
+    // 정확 매칭 모드(OFF):
+    //    1) minThreshold 있으면: '총 포인트 == 선택값' 우선 → 없으면 총 포인트를 +1씩 올리며 탐색
+    //    2) minThreshold 없으면: 임계치(=효과) 한 개라도 달성한 조합만
+    if (Number.isFinite(minThreshold)) {
+      const hits = pickByPointExactThenUp(all, grade, minThreshold);
+      filtered = hits.length ? hits : [];
     } else {
-      // 목표 없음: 달성 구간 있는 케이스만
-      filtered = all.filter(ci => ci.thr.length > 0 && ci.list.length > 0);
+      filtered = all.filter(ci => ci.list?.length > 0 && ci.thr?.length > 0);
     }
   }
 
