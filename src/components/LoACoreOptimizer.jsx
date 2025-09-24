@@ -1394,22 +1394,9 @@ useEffect(() => { applyGemSort(); }, [applyGemSort]);
                               )}
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>공급 의지력</label>
-                                {['HERO', 'LEGEND'].includes(String(c.grade)) ? (
-                                  <Dropdown
-                                    className="w-full lg:w-16"
-                                    value={String(supply)}
-                                    onChange={(val) => {
-                                      const num = Number(val);
-                                      if (Number.isFinite(num)) updateCore(c.id, { supply: num });
-                                    }}
-                                    items={supplyOptions.map(v => ({ value: String(v), label: `${v}` }))}
-                                    placeholder="공급 선택"
-                                  />
-                                ) : (
                                   <div className="h-10 px-3 rounded-xl border bg-gray-50 inline-flex items-center lg:w-16">
                                     <span className="text-primary font-semibold">{supply}</span>
                                   </div>
-                                )}
                               </div>
                               <div className="flex flex-col w-full lg:w-auto">
                                 <label className={labelCls}>목표 포인트</label>

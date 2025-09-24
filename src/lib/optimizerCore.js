@@ -13,8 +13,8 @@
 export const CORE_SUPPLY = { HERO: 7, LEGEND: 11, RELIC: 15, ANCIENT: 17 };
 // 등급별 “선택 가능한 공급 의지력” 목록
 export const CORE_SUPPLY_OPTIONS = {
-  HERO: [7, 9],
-  LEGEND: [11, 12],
+  HERO: [9],
+  LEGEND: [12],
   RELIC: [15],
   ANCIENT: [17],
 };
